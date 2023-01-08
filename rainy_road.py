@@ -4,12 +4,11 @@ import osmnx as ox
 import webbrowser
 import math
 
-START_LOCATION = "Sobral, Ceará"
-END_LOCATION = "Marco, Ceará"
+START_LOCATION = "Marco, CE"
+END_LOCATION = "Sobral, CE"
 OW_API_KEY = ""  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
-
 
 
 def degrees_to_radians(degrees):
@@ -68,7 +67,7 @@ def get_shortest_route(graph, start_latlng, end_latlng):
 
 def weather_at_point(lat, lng):
     if OW_API_KEY == "":
-        print("\n\n\nYou need to set an Open weather API key, you can get one for free at https://home.openweathermap.org/api_keys")
+        print("\n\n\nYou need to set an Open weather API key. You can get one for free at https://home.openweathermap.org/api_keys\n\n\n")
         exit(0)
     OW_API_URL = "https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={long}&appid={appid}&units=metric".format(
         lat=lat, long=lng, appid=OW_API_KEY)
@@ -101,7 +100,8 @@ def get_map(graph, shortest_route):
         print('Getting weather from y={}, x={} - {}'.format(
             node_data['y'], node_data['x'], node_weather[0]['main']))
         if any(item['main'] == 'Rain' or item['main'] == 'Snow' for item in node_weather):
-            rainroad.append(shortest_route[index:node])
+            for rainy_node_index in range(index, node):
+                rainroad.append(shortest_route[rainy_node_index])
     shortest_route_map = ox.plot_route_folium(
         graph, shortest_route, opacity=1)
     if rainroad:
