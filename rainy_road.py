@@ -5,8 +5,8 @@ import webbrowser
 import math
 import os
 
-START_LOCATION = "Bela cruz, Ceará"
-END_LOCATION = "Martinopole, Ceará"
+START_LOCATION = "Sobral, Ceará"
+END_LOCATION = "Forquilha, Ceará"
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
@@ -134,7 +134,10 @@ def get_map(graph, shortest_route):
 
 if __name__ == "__main__":
     start_latlng, end_latlng = get_coordinates(START_LOCATION, END_LOCATION)
-    
+    try:
+        graph = get_bbox_graph(start_latlng, end_latlng)
+    except:
+        graph = get_radius_graph(start_latlng, end_latlng)
     graph = get_bbox_graph(start_latlng, end_latlng)
     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
     shortest_route_map = get_map(graph, shortest_route)
