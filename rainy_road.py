@@ -3,10 +3,11 @@ from geopy.geocoders import Nominatim
 import osmnx as ox
 import webbrowser
 import math
+import os
 
-START_LOCATION = "Marco, CE"
-END_LOCATION = "Sobral, CE"
-OW_API_KEY = ""  # OpenWeather API key
+START_LOCATION = "Bela cruz, Ceará"
+END_LOCATION = "Martinopole, Ceará"
+OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
 
@@ -28,19 +29,40 @@ def distance_of_coordinates_in_km(coord1, coord2):
     return earth_radius * c * 1000
 
 
-def get_coodinates(start_location, end_location):
+def get_coordinates(start_location, end_location):
     locator = Nominatim(user_agent="myapp")
     try:
         start_latlng = locator.geocode(start_location).point
         end_latlng = locator.geocode(end_location).point
-    except:
-        print("Places not found: '{}', '{}'".format(
-            START_LOCATION, END_LOCATION))
+        if start_latlng is None or end_latlng is None:
+            raise ValueError("Geocode function didn't return any coordinates.")
+    except Exception as e:
+        print(f"Error: {e}")
         exit(0)
     return (start_latlng, end_latlng)
 
 
-def get_graph(start_latlng, end_latlng):
+def get_bbox_graph(start_latlng, end_latlng):
+    ox.config(log_console=True, use_cache=True)
+    north = max(start_latlng[0], end_latlng[0])
+    south = min(start_latlng[0], end_latlng[0])
+    east = max(start_latlng[1], end_latlng[1])
+    west = min(start_latlng[1], end_latlng[1])
+    buffer = 0.03 # buffer size in degrees
+    north += buffer
+    south -= buffer
+    east += buffer
+    west -= buffer
+    graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True)
+    
+    #ox.distance.add_edge_lengths(graph, precision=3, edges=None)
+    speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
+              'trunk': 100, 'residential': 40, 'tertiary': 30, 'unclassified': 20} # Add speeds to roads based on their type
+    graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
+    graph = ox.add_edge_travel_times(graph)
+    return graph
+
+def get_radius_graph(start_latlng, end_latlng):
     ox.config(log_console=True, use_cache=True)
     middle_latlng = (
         (start_latlng[0] + end_latlng[0])/2), ((start_latlng[1] + end_latlng[1])/2)  # get the middle spot on the route for generating the map
@@ -111,8 +133,9 @@ def get_map(graph, shortest_route):
 
 
 if __name__ == "__main__":
-    start_latlng, end_latlng = get_coodinates(START_LOCATION, END_LOCATION)
-    graph = get_graph(start_latlng, end_latlng)
+    start_latlng, end_latlng = get_coordinates(START_LOCATION, END_LOCATION)
+    
+    graph = get_bbox_graph(start_latlng, end_latlng)
     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
     shortest_route_map = get_map(graph, shortest_route)
     shortest_route_map.save("map.html")
