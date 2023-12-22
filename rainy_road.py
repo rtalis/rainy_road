@@ -6,7 +6,7 @@ import math
 import os
 
 START_LOCATION = "Sobral, Ceará"
-END_LOCATION = "Forquilha, Ceará"
+END_LOCATION = "Marco, Ceará"
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
@@ -26,7 +26,7 @@ def distance_of_coordinates_in_km(coord1, coord2):
     a = math.sin(dlat/2) * math.sin(dlat/2) + math.sin(dlon/2) * \
         math.sin(dlon/2) * math.cos(lat1) * math.cos(lat2)
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return earth_radius * c * 1000
+    return earth_radius * c 
 
 
 def get_coordinates(start_location, end_location):
@@ -66,7 +66,7 @@ def get_radius_graph(start_latlng, end_latlng):
     ox.config(log_console=True, use_cache=True)
     middle_latlng = (
         (start_latlng[0] + end_latlng[0])/2), ((start_latlng[1] + end_latlng[1])/2)  # get the middle spot on the route for generating the map
-    radius = (distance_of_coordinates_in_km(start_latlng, end_latlng))/2
+    radius = (distance_of_coordinates_in_km(start_latlng, end_latlng)*1000)/2
     graph = ox.graph_from_point(
         middle_latlng, dist=radius, network_type=MODE, simplify=False)
     ox.distance.add_edge_lengths(graph, precision=3, edges=None)
@@ -125,7 +125,7 @@ def get_map(graph, shortest_route):
             for rainy_node_index in range(index, node):
                 rainroad.append(shortest_route[rainy_node_index])
     shortest_route_map = ox.plot_route_folium(
-        graph, shortest_route, opacity=1)
+        graph, shortest_route, opacity=1,color="#00c600")
     if rainroad:
         shortest_route_map = ox.plot_route_folium(
             graph, rainroad, route_map=shortest_route_map, color="#cc0000", opacity=1)
