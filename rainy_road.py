@@ -6,7 +6,7 @@ import math
 import os
 
 START_LOCATION = "Sobral, Ceará"
-END_LOCATION = "Marco, Ceará"
+END_LOCATION = "Forquilha, Ceará"
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
