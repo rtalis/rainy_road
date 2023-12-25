@@ -1,5 +1,5 @@
 # app_async.py
-from flask import Flask, request, send_file, Response
+from flask import Flask, request, send_file, Response, redirect
 import psutil
 from rainy_road import get_coordinates, get_bbox_graph, get_shortest_route, get_map, distance_of_coordinates_in_km
 import asyncio
@@ -23,6 +23,11 @@ async def generate_map_async(start_location, end_location):
     shortest_route_map.save(map_file_path)
 
     return map_file_path
+
+
+@app.route("/", methods=["GET"])
+def redirect_external():
+    return redirect("https://github.com/rtalis/rainy-road-app/", code=302)
 
 @app.route('/generate_map', methods=['GET'])
 def generate_map():
