@@ -1,17 +1,26 @@
 # Rainy Road
+
 ## This script will show in a map if it is raining in a route between two cities.
 
-###  It uses mainly **osmnx** (with networkx). You can get the app that uses this script as an server [here](https://github.com/rtalis/rainy-road-app/tree/main).
-
+It uses mainly **osmnx** (with networkx). You can get the app that uses this script as an server [here](https://github.com/rtalis/rainy-road-app/tree/main).
 
 ## Getting Started
 
-You can download the project with: 
+Download, install requirements, set the OpenWeather key and run the script with:
+
 `git clone https://github.com/rtalis/rainy_road.git`
 
-Go to the project folder and install all requirements with with `pip install -r requirements.txt`
+`cd rainy_road`
 
-You can run `flask run` inside the project folder and access it in http://127.0.0.1:5000/generate_map?start_location=CITYONENAME,STATE&end_location=CITYTWONAME,STATE or install [gunicorn](https://docs.gunicorn.org/en/stable/install.html) for a production enviroment.  
+`pip install -r requirements.txt`
+
+`export OW_API_KEY="YOUAPIKEY"`
+
+`flask run` 
+
+You can get an OW API key for free [here](https://home.openweathermap.org/api_keys).  
+
+Access the server in http://127.0.0.1:5000/generate_map?start_location=CITYONENAME,STATE&end_location=CITYTWONAME,STATE or install [gunicorn](https://docs.gunicorn.org/en/stable/install.html) for a production enviroment.  
 
 You can also try the [Rainy Road App](https://github.com/rtalis/rainy-road-app/tree/main), it uses this server as an backend.
 
