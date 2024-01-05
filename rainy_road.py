@@ -4,6 +4,7 @@ import osmnx as ox
 import webbrowser
 import math
 import os
+from shapely.geometry import Polygon, Point, LineString
 
 START_LOCATION = "Sobral, Ceará"
 END_LOCATION = "Forquilha, Ceará"
@@ -40,8 +41,52 @@ def get_coordinates(start_location, end_location):
         print(f"Error: {e}")
         exit(0)
     return (start_latlng, end_latlng)
+def haversine(lat1, lon1, lat2, lon2):
+    # Haversine formula to calculate the great-circle distance between two points on a sphere
+    R = 6371  # Earth radius in kilometers
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2) * math.sin(dlon/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    distance = R * c
+    return distance
 
+def find_coordinate_c(a, b):
+    # Calculate the distance between A and B
+    d_ab = haversine(a[0], a[1], b[0], b[1])
+    # Calculate the angle between A and B
+    angle_ab = math.atan2(b[1] - a[1], b[0] - a[0])
+    # Calculate the distance between A and C 
+    d_ac = 1.2 * d_ab
+    # Small angle AC to AB
+    angle_ac = angle_ab + math.radians(-5)
+    angle_ad = angle_ab + math.radians(5)
+    # Calculate the coordinates of C, D
+    c_lat = a[0] + (d_ac / 6371) * (180 / math.pi) * math.cos(angle_ac)
+    c_lon = a[1] + (d_ac / 6371) * (180 / math.pi) * math.sin(angle_ac)
+    d_lat = a[0] + (d_ac / 6371) * (180 / math.pi) * math.cos(angle_ad)
+    d_lon = a[1] + (d_ac / 6371) * (180 / math.pi) * math.sin(angle_ad)
+    return (c_lat, c_lon), (d_lat, d_lon)
 
+def get_polygon_graph(start_latlng, end_latlng):
+    import matplotlib.pyplot as plt
+    import geopandas as gpd
+    ox.config(log_console=True, use_cache=True)
+    A, B = find_coordinate_c(start_latlng, end_latlng)
+    C, D = find_coordinate_c(end_latlng, start_latlng)
+    box_polygon = Polygon([A,B,C,D]),
+    AB = LineString([(start_latlng[1],start_latlng[0]), (end_latlng[1],end_latlng[0])])
+    p = gpd.GeoSeries(box_polygon)
+    AB.buffer(10)
+    p.plot()
+    plt.savefig("a.png")
+    graph = ox.graph_from_polygon(polygon=AB, network_type=MODE, simplify=True)    
+    #ox.distance.add_edge_lengths(graph, precision=3, edges=None)
+    speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
+              'trunk': 100, 'residential': 40, 'tertiary': 30, 'unclassified': 20} # Add speeds to roads based on their type
+    graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
+    graph = ox.add_edge_travel_times(graph)
+    return graph
 def get_bbox_graph(start_latlng, end_latlng):
     ox.config(log_console=True, use_cache=True)
     north = max(start_latlng[0], end_latlng[0])
@@ -61,7 +106,6 @@ def get_bbox_graph(start_latlng, end_latlng):
     graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
     graph = ox.add_edge_travel_times(graph)
     return graph
-
 def get_radius_graph(start_latlng, end_latlng):
     ox.config(log_console=True, use_cache=True)
     middle_latlng = (
@@ -135,10 +179,14 @@ def get_map(graph, shortest_route):
 if __name__ == "__main__":
     start_latlng, end_latlng = get_coordinates(START_LOCATION, END_LOCATION)
     try:
-        graph = get_bbox_graph(start_latlng, end_latlng)
-    except:
-        graph = get_radius_graph(start_latlng, end_latlng)
-    graph = get_bbox_graph(start_latlng, end_latlng)
+        graph = get_polygon_graph(start_latlng, end_latlng)
+    except Exception as e:
+        print(e)
+        try:
+            graph = get_bbox_graph(start_latlng, end_latlng)
+        except Exception as e:
+            print(e)
+            graph = get_radius_graph(start_latlng, end_latlng)
     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
     shortest_route_map = get_map(graph, shortest_route)
     shortest_route_map.save("map.html")
