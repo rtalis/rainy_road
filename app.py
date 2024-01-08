@@ -12,8 +12,8 @@ async def generate_map_async(start_location, end_location):
     ram_info = psutil.virtual_memory()
     distance = distance_of_coordinates_in_km(start_latlng, end_latlng)
     print("Distancia: {} e RAM: {}".format(distance,(ram_info.available/1024/1024) ))
-    if distance * 5 > ram_info.available/1024/1024:
-        raise
+    if distance * 2 > ram_info.available/1024/1024:
+        raise MemoryError("Insufficient memory for this request")
     graph = get_bbox_graph(start_latlng, end_latlng)
     # Get the shortest route and generate the map
     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
@@ -39,12 +39,18 @@ def generate_map():
     asyncio.set_event_loop(loop)
     try:
         result = loop.run_until_complete(generate_map_async(start_location, end_location))
-    except:
+       
+    except MemoryError as memory_error:
+        # Handle memory-related errors
         return Response(
-        "<center><h1>Sem memória para esta requisição</h1></center>",
-        status=507,
-        )
-    
+            f"<center><h1>{memory_error}</h1></center>",
+            status=507,
+        )    
+    except Exception as generic_exception:
+        return Response(
+            f"<center><h1>Error: {generic_exception}</h1></center>",
+            status=500,
+        )    
     return send_file(result, mimetype='text/html')
 
 if __name__ == "__main__":
