@@ -66,11 +66,13 @@ def get_bbox_graph(start_latlng, end_latlng):
 
 def get_radius_graph(start_latlng, end_latlng):
     ox.config(log_console=True, use_cache=True)
+    custom_filter='["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|\
+                unclassified|unclassified_link"]'
     middle_latlng = (
         (start_latlng[0] + end_latlng[0])/2), ((start_latlng[1] + end_latlng[1])/2)  # get the middle spot on the route for generating the map
     radius = (distance_of_coordinates_in_km(start_latlng, end_latlng)*1000)/2
     graph = ox.graph_from_point(
-        middle_latlng, dist=radius, network_type=MODE, simplify=False)
+        middle_latlng, dist=radius, network_type=None, simplify=True,custom_filter=custom_filter)
     ox.distance.add_edge_lengths(graph, precision=3, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 40, 'unclassified': 30} # Add speeds to roads based on their type

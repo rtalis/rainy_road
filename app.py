@@ -1,7 +1,7 @@
 # app_async.py
 from flask import Flask, request, send_file, Response, redirect
 import psutil
-from rainy_road import get_coordinates, get_bbox_graph, get_shortest_route, get_map, distance_of_coordinates_in_km
+from rainy_road import get_coordinates, get_bbox_graph, get_shortest_route, get_map, distance_of_coordinates_in_km,get_radius_graph
 import asyncio
 
 app = Flask(__name__)
@@ -14,10 +14,22 @@ async def generate_map_async(start_location, end_location):
     print("Distancia: {} e RAM: {}".format(distance,(ram_info.available/1024/1024) ))
     if distance * 2 > ram_info.available/1024/1024:
         raise MemoryError("Insufficient memory for this request")
-    graph = get_bbox_graph(start_latlng, end_latlng)
-    # Get the shortest route and generate the map
-    shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
-    shortest_route_map = get_map(graph, shortest_route)
+    try: 
+        graph = get_bbox_graph(start_latlng, end_latlng)
+        shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
+        shortest_route_map = get_map(graph, shortest_route)
+    except:
+        try:         
+            print("Usando método de mapa alternativo")
+            if distance * 5 > ram_info.available/1024/1024:
+                raise MemoryError("Insufficient memory for this request")
+            #fall to radius graph, uses more ram but will mostly find the route
+            graph = get_radius_graph(start_latlng, end_latlng)
+            shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
+            shortest_route_map = get_map(graph, shortest_route)
+        except:            
+            raise MemoryError("Não foi possível gerar o mapa no servidor")
+      
     # Save the map to a file
     map_file_path = "map.html"
     shortest_route_map.save(map_file_path)
@@ -45,7 +57,12 @@ def generate_map():
         return Response(
             f"<center><h1>{memory_error}</h1></center>",
             status=507,
-        )    
+        )
+    except RuntimeError as run_error:
+        return Response(
+            f"<center><h1>Error: {run_error}</h1></center>",
+            status=500,
+        )      
     except Exception as generic_exception:
         return Response(
             f"<center><h1>Error: {generic_exception}</h1></center>",
@@ -54,4 +71,4 @@ def generate_map():
     return send_file(result, mimetype='text/html')
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=False,host='0.0.0.0', port=5001)
