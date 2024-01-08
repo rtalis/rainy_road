@@ -43,8 +43,7 @@ def get_coordinates(start_location, end_location):
     return (start_latlng, end_latlng)
 
 def get_bbox_graph(start_latlng, end_latlng):
-    print(distance_of_coordinates_in_km(start_latlng,end_latlng))
-    ox.config(log_console=True, use_cache=True)
+    ox.config(log_console=False, use_cache=True)
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
     east = max(start_latlng[1], end_latlng[1])
