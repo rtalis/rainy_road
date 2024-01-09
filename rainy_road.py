@@ -6,7 +6,7 @@ import math
 import os
 
 START_LOCATION = "Bela cruz, Ce"
-END_LOCATION = "Marco, CE"
+END_LOCATION = "Acarau, CE"
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
@@ -31,6 +31,8 @@ def distance_of_coordinates_in_km(coord1, coord2):
 
 def get_coordinates(start_location, end_location):
     locator = Nominatim(user_agent="myapp")
+    start_location.strip()
+    end_location.strip()
     try:
         start_latlng = locator.geocode(start_location).point
         end_latlng = locator.geocode(end_location).point
@@ -42,7 +44,7 @@ def get_coordinates(start_location, end_location):
     return (start_latlng, end_latlng)
 
 def get_bbox_graph(start_latlng, end_latlng, use_cf):
-    ox.config(log_console=True, use_cache=True)
+    ox.config(log_console=False, use_cache=True)
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
     east = max(start_latlng[1], end_latlng[1])
