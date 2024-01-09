@@ -4,9 +4,8 @@ import osmnx as ox
 import webbrowser
 import math
 import os
-from shapely.geometry import Polygon, LineString, Point
 
-START_LOCATION = "Fortaleza, Ce"
+START_LOCATION = "Bela cruz, Ce"
 END_LOCATION = "Marco, CE"
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
@@ -42,21 +41,24 @@ def get_coordinates(start_location, end_location):
         exit(0)
     return (start_latlng, end_latlng)
 
-def get_bbox_graph(start_latlng, end_latlng):
-    ox.config(log_console=False, use_cache=True)
+def get_bbox_graph(start_latlng, end_latlng, use_cf):
+    ox.config(log_console=True, use_cache=True)
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
     east = max(start_latlng[1], end_latlng[1])
     west = min(start_latlng[1], end_latlng[1])
-    buffer = 0.06 # buffer size in degrees
+    buffer = 0.08 # buffer size in degrees
     north += buffer
     south -= buffer
     east += buffer
     west -= buffer
     custom_filter='["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|\
                 unclassified|unclassified_link"]'
-    graph = ox.graph_from_bbox(north, south, east, west, network_type=None, simplify=True, custom_filter=custom_filter, truncate_by_edge=True)
-    
+    if (use_cf):
+        graph = ox.graph_from_bbox(north, south, east, west, network_type=None, simplify=True, custom_filter=custom_filter)
+    else:
+        graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True, truncate_by_edge=True)
+
     #ox.distance.add_edge_lengths(graph, precision=3, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 30, 'unclassified': 20} # Add speeds to roads based on their type
@@ -65,14 +67,13 @@ def get_bbox_graph(start_latlng, end_latlng):
     return graph
 
 def get_radius_graph(start_latlng, end_latlng):
-    ox.config(log_console=True, use_cache=True)
-    custom_filter='["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|\
-                unclassified|unclassified_link"]'
+    ox.config(log_console=False, use_cache=True)
+
     middle_latlng = (
         (start_latlng[0] + end_latlng[0])/2), ((start_latlng[1] + end_latlng[1])/2)  # get the middle spot on the route for generating the map
     radius = (distance_of_coordinates_in_km(start_latlng, end_latlng)*1000)/2
     graph = ox.graph_from_point(
-        middle_latlng, dist=radius, network_type=None, simplify=True,custom_filter=custom_filter)
+        middle_latlng, dist=radius, network_type=MODE, simplify=True)
     ox.distance.add_edge_lengths(graph, precision=3, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 40, 'unclassified': 30} # Add speeds to roads based on their type
@@ -112,6 +113,8 @@ def get_map(graph, shortest_route):
     lenght_in_nodes = len(shortest_route)
     number_of_samples = int(
         ((math.sqrt(lenght_in_nodes)) / (math.log10(lenght_in_nodes))) + 4) #Get a number based on how many nodes (distance) a route has to get weather from. 
+    if (number_of_samples > lenght_in_nodes):
+        number_of_samples = lenght_in_nodes
     leap = int(lenght_in_nodes/number_of_samples)
     nodes = []
     rainroad = []

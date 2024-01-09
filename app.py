@@ -15,20 +15,28 @@ async def generate_map_async(start_location, end_location):
     if distance * 2 > ram_info.available/1024/1024:
         raise MemoryError("Insufficient memory for this request")
     try: 
-        graph = get_bbox_graph(start_latlng, end_latlng)
+        graph = get_bbox_graph(start_latlng, end_latlng, True)
         shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
         shortest_route_map = get_map(graph, shortest_route)
     except:
-        try:         
-            print("Usando método de mapa alternativo")
-            if distance * 5 > ram_info.available/1024/1024:
+        try: 
+            print("Usando mapa sem custom filter")
+            if distance * 4 > ram_info.available/1024/1024:
                 raise MemoryError("Insufficient memory for this request")
-            #fall to radius graph, uses more ram but will mostly find the route
-            graph = get_radius_graph(start_latlng, end_latlng)
+            graph = get_bbox_graph(start_latlng, end_latlng, False)
             shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
             shortest_route_map = get_map(graph, shortest_route)
-        except:            
-            raise MemoryError("Não foi possível gerar o mapa no servidor")
+        except:
+            try:         
+                print("Usando método de mapa por raio")
+                if distance * 10 > ram_info.available/1024/1024:
+                    raise MemoryError("Insufficient memory for this request")
+                #fall to radius graph, uses more ram but will mostly find the route
+                graph = get_radius_graph(start_latlng, end_latlng)
+                shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
+                shortest_route_map = get_map(graph, shortest_route)
+            except:            
+                raise RuntimeError("Não foi possível gerar o mapa para estas cidades")
       
     # Save the map to a file
     map_file_path = "map.html"
@@ -60,7 +68,7 @@ def generate_map():
         )
     except RuntimeError as run_error:
         return Response(
-            f"<center><h1>Error: {run_error}</h1></center>",
+            f"<center><h1>Erro de tempo de execução: {run_error}</h1></center>",
             status=500,
         )      
     except Exception as generic_exception:
