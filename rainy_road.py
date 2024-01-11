@@ -43,8 +43,8 @@ def get_coordinates(start_location, end_location):
         exit(0)
     return (start_latlng, end_latlng)
 
-def get_bbox_graph(start_latlng, end_latlng, use_cf):
-    ox.config(log_console=False, use_cache=True)
+def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
+    ox.config(log_console=True, use_cache=True)
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
     east = max(start_latlng[1], end_latlng[1])
@@ -54,12 +54,16 @@ def get_bbox_graph(start_latlng, end_latlng, use_cf):
     south -= buffer
     east += buffer
     west -= buffer
-    custom_filter='["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|\
-                unclassified|unclassified_link"]'
-    if (use_cf):
-        graph = ox.graph_from_bbox(north, south, east, west, network_type=None, simplify=True, custom_filter=custom_filter)
+    if simple_filter:
+        custom_filter='["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link"]'
     else:
-        graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True, truncate_by_edge=True)
+        custom_filter='["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|\
+                    unclassified|unclassified_link"]'
+
+    if (use_cf):
+        graph = ox.graph_from_bbox(north, south, east, west, network_type=None, simplify=True, custom_filter=custom_filter, truncate_by_edge=True)
+    else:
+        graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True)
 
     #ox.distance.add_edge_lengths(graph, precision=3, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
