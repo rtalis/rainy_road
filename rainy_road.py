@@ -44,7 +44,7 @@ def get_coordinates(start_location, end_location):
     return (start_latlng, end_latlng)
 
 def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
-    ox.config(log_console=True, use_cache=True)
+    ox.config(log_console=False, use_cache=True)
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
     east = max(start_latlng[1], end_latlng[1])
@@ -135,7 +135,7 @@ def get_map(graph, shortest_route):
         node_weather = weather_at_point(node_data['y'], node_data['x'])
         print('Getting weather from y={}, x={} - {}'.format(
             node_data['y'], node_data['x'], node_weather[0]['main']))
-        if any(item['main'] == 'Rain' or item['main'] == 'Snow' for item in node_weather):
+        if any(item['main'] == 'Rain' or item['main'] == 'Snow' or item['main'] == 'Thunderstorm' for item in node_weather):
             for rainy_node_index in range(index, node):
                 rainroad.append(shortest_route[rainy_node_index])
     shortest_route_map = ox.plot_route_folium(
