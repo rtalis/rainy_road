@@ -15,9 +15,9 @@ async def generate_map_async(start_location, end_location):
     ram_info = psutil.virtual_memory()
     distance = distance_of_coordinates_in_km(start_latlng, end_latlng)
     print("Distancia: {} e RAM: {}".format(distance,(ram_info.available/1024/1024) ))
-    try: 
-        if distance * 2 > ram_info.available/1024/1024:
-            raise MemoryError("Insufficient memory for this request (1)")
+    if distance * 2 > ram_info.available/1024/1024:
+            raise MemoryError("Memória insuficiente para esta requisição (1)")
+    try:         
         if distance < 10:
             raise "Too short, use bbox filter map"   
         graph = get_bbox_graph(start_latlng, end_latlng, True, True)
@@ -25,25 +25,25 @@ async def generate_map_async(start_location, end_location):
         shortest_route_map = get_map(graph, shortest_route)
     except:  
         print("Usando mapa bbox com filter")   
-        try: 
-            if distance * 4 > ram_info.available/1024/1024:
-                raise MemoryError("Insufficient memory for this request (2)")
+        if distance * 4 > ram_info.available/1024/1024:
+            raise MemoryError("Memória insuficiente para esta requisição (2)")
+        try:            
             graph = get_bbox_graph(start_latlng, end_latlng, True, False)
             shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
             shortest_route_map = get_map(graph, shortest_route)
         except:
+            if distance * 8 > ram_info.available/1024/1024:
+                raise MemoryError("Memória insuficiente para esta requisição (3)")
             try: 
-                print("Usando mapa sem custom filter")
-                if distance * 8 > ram_info.available/1024/1024:
-                    raise MemoryError("Insufficient memory for this request (3)")
+                print("Usando mapa sem custom filter")               
                 graph = get_bbox_graph(start_latlng, end_latlng, False, False)
                 shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
                 shortest_route_map = get_map(graph, shortest_route)
             except:
+                if distance * 12 > ram_info.available/1024/1024:
+                    raise MemoryError("Memória insuficiente para esta requisição")
                 try:         
-                    print("Usando método de mapa por raio")
-                    if distance * 12 > ram_info.available/1024/1024:
-                        raise MemoryError("Insufficient memory for this request")
+                    print("Usando método de mapa por raio")       
                     #fall to radius graph, uses more ram but will mostly find the route
                     graph = get_radius_graph(start_latlng, end_latlng)
                     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
