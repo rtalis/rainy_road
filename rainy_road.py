@@ -44,7 +44,8 @@ def get_coordinates(start_location, end_location):
     return (start_latlng, end_latlng)
 
 def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
-    ox.config(log_console=False, use_cache=True)
+    ox.settings.log_console=False
+    ox.settings.use_cache=True
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
     east = max(start_latlng[1], end_latlng[1])
@@ -65,7 +66,7 @@ def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
     else:
         graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True)
 
-    #ox.distance.add_edge_lengths(graph, precision=3, edges=None)
+    ox.distance.add_edge_lengths(graph, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 30, 'unclassified': 20} # Add speeds to roads based on their type
     graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
@@ -73,14 +74,14 @@ def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
     return graph
 
 def get_radius_graph(start_latlng, end_latlng):
-    ox.config(log_console=False, use_cache=True)
-
+    ox.settings.log_console=False
+    ox.settings.use_cache=True
     middle_latlng = (
         (start_latlng[0] + end_latlng[0])/2), ((start_latlng[1] + end_latlng[1])/2)  # get the middle spot on the route for generating the map
     radius = (distance_of_coordinates_in_km(start_latlng, end_latlng)*1000)/2
     graph = ox.graph_from_point(
         middle_latlng, dist=radius, network_type=MODE, simplify=True)
-    ox.distance.add_edge_lengths(graph, precision=3, edges=None)
+    ox.distance.add_edge_lengths(graph, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 40, 'unclassified': 30} # Add speeds to roads based on their type
     graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
@@ -149,7 +150,7 @@ def get_map(graph, shortest_route):
 if __name__ == "__main__":
     start_latlng, end_latlng = get_coordinates(START_LOCATION, END_LOCATION)
     try:
-        graph = get_bbox_graph(start_latlng, end_latlng)
+        graph = get_bbox_graph(start_latlng, end_latlng, False, False)
     except Exception as e:
         print(e)
         try:

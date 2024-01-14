@@ -15,36 +15,40 @@ async def generate_map_async(start_location, end_location):
     ram_info = psutil.virtual_memory()
     distance = distance_of_coordinates_in_km(start_latlng, end_latlng)
     print("Distancia: {} e RAM: {}".format(distance,(ram_info.available/1024/1024) ))
+    #First try the route using only motorways and primary roads, should use less ram on dense places. (Distance * 2)
     if distance * 2 > ram_info.available/1024/1024:
-            raise MemoryError("Memória insuficiente para esta requisição (1)")
-    try:         
+            raise MemoryError("Memória insuficiente para esta requisição (1) </br>Tente uma rota mais curta")
+    try:
+        #when the distance is too short and the map is simplified, the shortest route gets weird, raise to try on next mode         
         if distance < 10:
             raise "Too short, use bbox filter map"   
         graph = get_bbox_graph(start_latlng, end_latlng, True, True)
         shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
         shortest_route_map = get_map(graph, shortest_route)
     except:  
-        print("Usando mapa bbox com filter")   
-        if distance * 4 > ram_info.available/1024/1024:
-            raise MemoryError("Memória insuficiente para esta requisição (2)")
+        print("Usando mapa bbox com filter")
+        #If you countdn't find the route using primary roads, you're probably in a less dense area. Disable the only primary roads and use distance * 2 as well. 
+        if distance * 2 > ram_info.available/1024/1024:
+            raise MemoryError("Memória insuficiente para esta requisição (2)</br>Tente uma rota mais curta")
         try:            
             graph = get_bbox_graph(start_latlng, end_latlng, True, False)
             shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
             shortest_route_map = get_map(graph, shortest_route)
         except:
+            #Try get the route and graph using all available roads, uses more ram. Distance * 8 
             if distance * 8 > ram_info.available/1024/1024:
-                raise MemoryError("Memória insuficiente para esta requisição (3)")
+                raise MemoryError("Memória insuficiente para esta requisição (3)</br>Tente uma rota mais curta")
             try: 
                 print("Usando mapa sem custom filter")               
                 graph = get_bbox_graph(start_latlng, end_latlng, False, False)
                 shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
                 shortest_route_map = get_map(graph, shortest_route)
             except:
-                if distance * 12 > ram_info.available/1024/1024:
-                    raise MemoryError("Memória insuficiente para esta requisição")
+                #Using a round graph with all roads, uses more ram. Distance * 14  
+                if distance * 14 > ram_info.available/1024/1024:
+                    raise MemoryError("Memória insuficiente para esta requisição</br>Tente uma rota mais curta")
                 try:         
                     print("Usando método de mapa por raio")       
-                    #fall to radius graph, uses more ram but will mostly find the route
                     graph = get_radius_graph(start_latlng, end_latlng)
                     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
                     shortest_route_map = get_map(graph, shortest_route)
