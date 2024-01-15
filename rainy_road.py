@@ -1,12 +1,15 @@
 import requests
 from geopy.geocoders import Nominatim
+import folium
 import osmnx as ox
 import webbrowser
 import math
+import xyzservices.providers as xyz
 import os
 
-START_LOCATION = "Bela cruz, Ce"
-END_LOCATION = "Acarau, CE"
+START_LOCATION = "Marco, Ce"
+END_LOCATION = "Fortaleza, CE"
+
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
@@ -65,12 +68,25 @@ def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
         graph = ox.graph_from_bbox(north, south, east, west, network_type=None, simplify=True, custom_filter=custom_filter, truncate_by_edge=True)
     else:
         graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True)
-
+   
     ox.distance.add_edge_lengths(graph, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 30, 'unclassified': 20} # Add speeds to roads based on their type
     graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
     graph = ox.add_edge_travel_times(graph)
+    
+    
+    
+    
+    middle_latlng = (
+        (start_latlng[0] + end_latlng[0])/2), ((start_latlng[1] + end_latlng[1])/2)  # get the middle spot on the route for generating the map
+    tiles = xyz.OpenWeatherMap.Precipitation(apiKey=OW_API_KEY)
+    m = folium.Map(middle_latlng ,zoom_start=10, tiles="cartodbpositron")
+    folium.TileLayer(tiles=tiles, opacity=1).add_to(m)
+    geo_map = ox.graph_to_gdfs(graph, nodes= False)
+    folium.GeoJson(geo_map).add_to(m)
+    m.save("folium.html")
+    
     return graph
 
 def get_radius_graph(start_latlng, end_latlng):
@@ -150,7 +166,7 @@ def get_map(graph, shortest_route):
 if __name__ == "__main__":
     start_latlng, end_latlng = get_coordinates(START_LOCATION, END_LOCATION)
     try:
-        graph = get_bbox_graph(start_latlng, end_latlng, False, False)
+        graph = get_bbox_graph(start_latlng, end_latlng, True, True)
     except Exception as e:
         print(e)
         try:
