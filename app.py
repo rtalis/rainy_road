@@ -3,6 +3,7 @@ from flask import Flask, request, send_file, Response, redirect
 import psutil
 from rainy_road import get_coordinates, get_bbox_graph, get_shortest_route, get_map, distance_of_coordinates_in_km,get_radius_graph
 import asyncio
+from markupsafe import escape
 
 app = Flask(__name__)
 
@@ -69,8 +70,8 @@ def redirect_external():
 @app.route('/generate_map', methods=['GET'])
 def generate_map():
     # Get city names from the query parameters
-    start_location = request.args.get('start_location')
-    end_location = request.args.get('end_location')
+    start_location = escape(request.args.get('start_location'))
+    end_location = escape(request.args.get('end_location'))
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

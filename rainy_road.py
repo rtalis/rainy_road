@@ -1,12 +1,15 @@
 import requests
 from geopy.geocoders import Nominatim
+import folium
 import osmnx as ox
 import webbrowser
 import math
+import xyzservices.providers as xyz
 import os
 
-START_LOCATION = "Bela cruz, Ce"
-END_LOCATION = "Acarau, CE"
+START_LOCATION = "Marco, CE"
+END_LOCATION = "Fortaleza, CE"
+
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
@@ -44,7 +47,7 @@ def get_coordinates(start_location, end_location):
     return (start_latlng, end_latlng)
 
 def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
-    ox.settings.log_console=False
+    ox.settings.log_console=True
     ox.settings.use_cache=True
     north = max(start_latlng[0], end_latlng[0])
     south = min(start_latlng[0], end_latlng[0])
@@ -65,12 +68,13 @@ def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
         graph = ox.graph_from_bbox(north, south, east, west, network_type=None, simplify=True, custom_filter=custom_filter, truncate_by_edge=True)
     else:
         graph = ox.graph_from_bbox(north, south, east, west, network_type=MODE, simplify=True)
-
+   
     ox.distance.add_edge_lengths(graph, edges=None)
     speeds = {'primary': 100, 'secondary': 80, 'motorway': 100,
               'trunk': 100, 'residential': 40, 'tertiary': 30, 'unclassified': 20} # Add speeds to roads based on their type
     graph = ox.add_edge_speeds(graph, hwy_speeds=speeds)
     graph = ox.add_edge_travel_times(graph)
+    
     return graph
 
 def get_radius_graph(start_latlng, end_latlng):
@@ -110,7 +114,7 @@ def weather_at_point(lat, lng):
         data = response.json()
         weather_data = data['weather']
     else:
-        print("Error in the HTTP request\n")
+        print("Error in the HTTP request\n {}".format(response.status_code))
         print(data['main'])
     return weather_data
 
@@ -119,7 +123,7 @@ def get_map(graph, shortest_route):
 
     lenght_in_nodes = len(shortest_route)
     number_of_samples = int(
-        ((math.sqrt(lenght_in_nodes)) / (math.log10(lenght_in_nodes))) + 4) #Get a number based on how many nodes (distance) a route has to get weather from. 
+        ((math.sqrt(lenght_in_nodes)) / (math.log10(lenght_in_nodes))) + 2) #Get a number based on how many nodes (distance) a route has to get weather from. 
     if (number_of_samples > lenght_in_nodes):
         number_of_samples = lenght_in_nodes
     leap = int(lenght_in_nodes/number_of_samples)
@@ -139,18 +143,21 @@ def get_map(graph, shortest_route):
         if any(item['main'] == 'Rain' or item['main'] == 'Snow' or item['main'] == 'Thunderstorm' for item in node_weather):
             for rainy_node_index in range(index, node):
                 rainroad.append(shortest_route[rainy_node_index])
-    shortest_route_map = ox.plot_route_folium(
-        graph, shortest_route, opacity=1,color="#00c600")
+    shortest_route_map = ox.plot_route_folium(graph, shortest_route, opacity=0.5,color="#00c600")
+
+    #Uncomment to add weather tiles over the map. Consumes a lot of api requests
+    #tiles = xyz.OpenWeatherMap.Precipitation(apiKey=OW_API_KEY)
+
     if rainroad:
-        shortest_route_map = ox.plot_route_folium(
-            graph, rainroad, route_map=shortest_route_map, color="#cc0000", opacity=1)
+        shortest_route_map = ox.plot_route_folium(graph, rainroad, route_map=shortest_route_map, color="#cc0000", opacity=1)
+    #folium.TileLayer(tiles=tiles, opacity=1).add_to(shortest_route_map)
     return shortest_route_map
 
 
 if __name__ == "__main__":
     start_latlng, end_latlng = get_coordinates(START_LOCATION, END_LOCATION)
     try:
-        graph = get_bbox_graph(start_latlng, end_latlng, False, False)
+        graph = get_bbox_graph(start_latlng, end_latlng, True, False)
     except Exception as e:
         print(e)
         try:
@@ -158,6 +165,9 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
     shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
-    shortest_route_map = get_map(graph, shortest_route)
+    try:
+        shortest_route_map = get_map(graph, shortest_route)
+    except Exception as e:
+        print(e)
     shortest_route_map.save("map.html")
     webbrowser.open("map.html")
