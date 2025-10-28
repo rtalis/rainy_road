@@ -37,9 +37,12 @@ def distance_of_coordinates_in_km(coord1, coord2):
 
 
 def get_coordinates(start_location, end_location):
-    locator = Nominatim(user_agent="myapp")
-    start_location.strip()
-    end_location.strip()
+    locator = Nominatim(user_agent="rainy-road")
+    start_location = (start_location or "").strip()
+    end_location = (end_location or "").strip()
+
+    if not start_location or not end_location:
+        raise RuntimeError("Os nomes das cidades não podem estar vazios.")
     try:
         start_latlng = locator.geocode(start_location).point
         end_latlng = locator.geocode(end_location).point
@@ -49,6 +52,23 @@ def get_coordinates(start_location, end_location):
         print(f"Error: {e}")
         exit(0)
     return (start_latlng, end_latlng)
+
+
+def get_coordinates2(start_location, end_location):
+    locator = Nominatim(user_agent="rainy-road")
+    start_location = (start_location or "").strip()
+    end_location = (end_location or "").strip()
+
+
+
+    try:
+        start = locator.geocode(start_location)
+        end = locator.geocode(end_location)
+    except Exception as exc:
+        raise RuntimeError("Falha ao consultar o serviço de geocodificação") from exc
+
+    if start is None or end is None:
+        raise RuntimeError("Não foi possível localizar uma ou ambas as cidades informadas")
 
 def get_bbox_graph(start_latlng, end_latlng, use_cf, simple_filter):
     ox.settings.log_console=True
