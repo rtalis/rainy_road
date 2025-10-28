@@ -7,12 +7,16 @@ import math
 import xyzservices.providers as xyz
 import os
 
-START_LOCATION = "Marco, CE"
+START_LOCATION = "Sobral, CE"
 END_LOCATION = "Fortaleza, CE"
 
 OW_API_KEY = os.getenv('OW_API_KEY')  # OpenWeather API key
 MODE = 'drive'  # bike, walk
 OPTIMIZER = 'travel_time'  # lenght, travel_time
+
+ox.settings.overpass_endpoint = "https://maps.mail.ru/osm/tools/overpass/api" #Comment this line to use the default overpass server
+ox.settings.overpass_rate_limit=False #Set to True when using the default overpass server
+
 
 
 def degrees_to_radians(degrees):
