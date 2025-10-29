@@ -5,7 +5,7 @@ from pathlib import Path
 
 import psutil
 from celery import Celery
-from flask import Flask, jsonify, redirect, request, send_file
+from flask import Flask, Response, jsonify, redirect, request, send_file
 from markupsafe import escape
 
 from rainy_road import (
@@ -93,28 +93,28 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
             "Gerando rota com vias principais",
             2,
             lambda: get_bbox_graph(start_latlng, end_latlng, True, True),
-            "Memoria insuficiente para esta requisicao (modo principais). Tente uma rota mais curta.",
+            "Memoria insuficiente para esta requisicao (M1). \nTente uma rota mais curta.",
         ),
         (
             "graph_secondary",
             "Gerando rota completa por bounding box",
             2,
             lambda: get_bbox_graph(start_latlng, end_latlng, True, False),
-            "Memoria insuficiente para esta requisicao (modo bbox filtrado). Tente uma rota mais curta.",
+            "Memoria insuficiente para esta requisicao (M2). \nTente uma rota mais curta.",
         ),
         (
             "graph_full",
             "Gerando rota sem filtros personalizados",
             8,
             lambda: get_bbox_graph(start_latlng, end_latlng, False, False),
-            "Memoria insuficiente para esta requisicao (modo bbox completo). Tente uma rota mais curta.",
+            "Memoria insuficiente para esta requisicao (M3). \nTente uma rota mais curta.",
         ),
         (
             "graph_radius",
             "Gerando rota por raio",
             14,
             lambda: get_radius_graph(start_latlng, end_latlng),
-            "Memoria insuficiente para esta requisicao (modo raio). Tente uma rota mais curta.",
+            "Memoria insuficiente para esta requisicao (M4). \nTente uma rota mais curta.",
         ),
     )
 
@@ -178,6 +178,42 @@ def redirect_external():
 
 
 @app.route("/generate_map", methods=["GET"])
+def generate_map_legacy():
+    start_location = _sanitize_location(request.args.get("start_location"))
+    end_location = _sanitize_location(request.args.get("end_location"))
+
+    if not start_location or not end_location:
+        return Response(
+            "<center><h1>As cidades de origem e destino sao obrigatorias.</h1></center>",
+            status=400,
+            mimetype="text/html",
+        )
+
+    try:
+        map_path = create_map(start_location, end_location)
+    except MemoryError as memory_error:
+        return Response(
+            f"<center><h1>{memory_error}</h1></center>",
+            status=507,
+            mimetype="text/html",
+        )
+    except RuntimeError as runtime_error:
+        return Response(
+            f"<center><h1>Erro de tempo de execucao: {runtime_error}</h1></center>",
+            status=500,
+            mimetype="text/html",
+        )
+    except Exception as exc:
+        return Response(
+            f"<center><h1>Erro inesperado: {exc}</h1></center>",
+            status=500,
+            mimetype="text/html",
+        )
+
+    return send_file(map_path, mimetype="text/html")
+
+
+@app.route("/generate_map_v2", methods=["GET"])
 def request_map_generation():
     start_location = _sanitize_location(request.args.get("start_location"))
     end_location = _sanitize_location(request.args.get("end_location"))
