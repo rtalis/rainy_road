@@ -16,6 +16,8 @@ Download, install requirements, set the OpenWeather key and run the script with:
 
 `export OW_API_KEY="YOUAPIKEY"`
 
+Install redis for your distribution. In debian based: ```sudo apt install redis-server```
+
 `flask run` 
 
 You can get an OW API key for free [here](https://home.openweathermap.org/api_keys).  
