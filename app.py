@@ -39,18 +39,19 @@ celery_app = make_celery(app)
 
 PROGRESS_PERCENT = {
     "queued": 0,
-    "coordinates": 10,
-    "memory_check": 20,
-    "graph_primary": 35,
-    "graph_secondary": 50,
-    "graph_full": 65,
-    "graph_radius": 75,
-    "route": 85,
-    "map": 92,
+    "coordinates": 5,
+    "memory_check": 10,
+    "graph_primary": 25,
+    "graph_secondary": 40,
+    "graph_full": 55,
+    "graph_radius": 65,
+    "route": 75,
+    "map": 85,
     "saving": 97,
     "complete": 100,
     "failed": 100,
 }
+
 
 
 def _update_progress(task, stage: str, detail: str = "") -> None:
@@ -89,28 +90,28 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
     attempts = (
         (
             "graph_primary",
-            "Gerando grafo com vias principais",
+            "Gerando rota com vias principais",
             2,
             lambda: get_bbox_graph(start_latlng, end_latlng, True, True),
             "Memoria insuficiente para esta requisicao (modo principais). Tente uma rota mais curta.",
         ),
         (
             "graph_secondary",
-            "Gerando grafo completo por bounding box",
+            "Gerando rota completa por bounding box",
             2,
             lambda: get_bbox_graph(start_latlng, end_latlng, True, False),
             "Memoria insuficiente para esta requisicao (modo bbox filtrado). Tente uma rota mais curta.",
         ),
         (
             "graph_full",
-            "Gerando grafo sem filtros personalizados",
+            "Gerando rota sem filtros personalizados",
             8,
             lambda: get_bbox_graph(start_latlng, end_latlng, False, False),
             "Memoria insuficiente para esta requisicao (modo bbox completo). Tente uma rota mais curta.",
         ),
         (
             "graph_radius",
-            "Gerando grafo por raio",
+            "Gerando rota por raio",
             14,
             lambda: get_radius_graph(start_latlng, end_latlng),
             "Memoria insuficiente para esta requisicao (modo raio). Tente uma rota mais curta.",
@@ -124,9 +125,9 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
             _update_progress(
                 task,
                 stage,
-                "Distancia curta detectada, pulando grafo com vias principais",
+                "Distancia curta detectada, pulando rota com vias principais",
             )
-            last_error = RuntimeError("Distancia insuficiente para grafo de vias principais")
+            last_error = RuntimeError("Distancia insuficiente para rota de vias principais")
             continue
 
         _update_progress(task, stage, description)
