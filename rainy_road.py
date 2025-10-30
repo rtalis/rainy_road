@@ -1,5 +1,7 @@
 import requests
 from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
+import time
 import folium
 import osmnx as ox
 import webbrowser
@@ -42,16 +44,27 @@ def get_coordinates(start_location, end_location):
     end_location = (end_location or "").strip()
 
     if not start_location or not end_location:
-        raise RuntimeError("Os nomes das cidades não podem estar vazios.")
-    try:
-        start_latlng = locator.geocode(start_location).point
-        end_latlng = locator.geocode(end_location).point
-        if start_latlng is None or end_latlng is None:
-            raise ValueError("Geocode function didn't return any coordinates.")
-    except Exception as e:
-        print(f"Error: {e}")
-        exit(0)
-    return (start_latlng, end_latlng)
+        raise ValueError("Os nomes das cidades não podem estar vazios.")
+
+    geocode = RateLimiter(locator.geocode, min_delay_seconds=1, max_retries=0)
+
+    timeout = 10
+    max_attempts = 3
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            start = geocode(start_location, timeout=timeout)
+            end = geocode(end_location, timeout=timeout)
+            if start is None or end is None:
+                raise RuntimeError("Geocoding returned no results for one or both locations")
+            return (start.point, end.point)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_attempts:
+                wait = attempt * 1.5
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"Falha ao geocodificar as cidades: {exc}") from exc
 
 
 def get_coordinates2(start_location, end_location):
@@ -128,19 +141,23 @@ def get_shortest_route(graph, start_latlng, end_latlng):
 
 
 def weather_at_point(lat, lng):
-    if OW_API_KEY == "":
-        print("\n\n\nYou need to set an Open weather API key. You can get one for free at https://home.openweathermap.org/api_keys\n\n\n")
-        exit(0)
-    OW_API_URL = "https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={long}&appid={appid}&units=metric".format(
-        lat=lat, long=lng, appid=OW_API_KEY)
-    response = requests.get(OW_API_URL)
-    if response.status_code == 200:
-        data = response.json()
-        weather_data = data['weather']
-    else:
-        print("Error in the HTTP request\n {}".format(response.status_code))
-        print(data['main'])
-    return weather_data
+    if not OW_API_KEY:
+        raise RuntimeError(
+            "OpenWeather API key is not set. Define OW_API_KEY environment variable."
+        )
+
+    OW_API_URL = (
+        "https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={long}&appid={appid}&units=metric"
+        .format(lat=lat, long=lng, appid=OW_API_KEY)
+    )
+    try:
+        resp = requests.get(OW_API_URL, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        weather_data = data.get("weather", [])
+        return weather_data
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Erro ao consultar OpenWeather: {exc}") from exc
 
 
 def get_map(graph, shortest_route):
