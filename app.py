@@ -6,7 +6,7 @@ from pathlib import Path
 
 import psutil
 from celery import Celery
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
 from markupsafe import escape
 
@@ -209,7 +209,7 @@ def _sanitize_location(value):
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html")
+    return send_file("static/index.html", mimetype="text/html")
 
 
 @app.route("/generate_map", methods=["GET"])
