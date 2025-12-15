@@ -1,11 +1,13 @@
 # app_async.py
 import os
+import time
 import uuid
 from pathlib import Path
 
 import psutil
 from celery import Celery
-from flask import Flask, Response, jsonify, redirect, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask_cors import CORS
 from markupsafe import escape
 
 from rainy_road import (
@@ -18,6 +20,38 @@ from rainy_road import (
 )
 
 app = Flask(__name__)
+
+# CORS configuration
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+if CORS_ORIGINS == "*":
+    CORS(app)
+else:
+    CORS(app, origins=[origin.strip() for origin in CORS_ORIGINS.split(",")])
+
+# Generated maps configuration
+GENERATED_MAPS_DIR = os.getenv("GENERATED_MAPS_DIR", "generated_maps")
+MAP_MAX_AGE_SECONDS = int(os.getenv("MAP_MAX_AGE_SECONDS", "7200"))
+
+
+def cleanup_old_maps() -> int:
+    """Delete map files older than MAP_MAX_AGE_SECONDS. Returns count of deleted files."""
+    output_dir = Path(GENERATED_MAPS_DIR)
+    if not output_dir.exists():
+        return 0
+
+    deleted_count = 0
+    current_time = time.time()
+
+    for map_file in output_dir.glob("map_*.html"):
+        try:
+            file_age = current_time - map_file.stat().st_mtime
+            if file_age > MAP_MAX_AGE_SECONDS:
+                map_file.unlink()
+                deleted_count += 1
+        except OSError:
+            continue
+
+    return deleted_count
 
 
 def make_celery(flask_app: Flask) -> Celery:
@@ -66,8 +100,9 @@ def _update_progress(task, stage: str, detail: str = "") -> None:
 
 
 def _save_map_file(route_map) -> str:
-    output_dir = Path(os.getenv("RAINY_ROAD_OUTPUT_DIR", "generated_maps"))
+    output_dir = Path(GENERATED_MAPS_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
+    cleanup_old_maps()
     file_path = output_dir / f"map_{uuid.uuid4().hex}.html"
     route_map.save(file_path)
     return str(file_path)
@@ -173,8 +208,8 @@ def _sanitize_location(value):
 
 
 @app.route("/", methods=["GET"])
-def redirect_external():
-    return redirect("https://github.com/rtalis/rainy-road-app/", code=302)
+def index():
+    return render_template("index.html")
 
 
 @app.route("/generate_map", methods=["GET"])
