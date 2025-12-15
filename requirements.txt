@@ -9,6 +9,7 @@ click-plugins==1.1.1
 cligj==0.7.2
 fiona==1.9.5
 Flask==3.0.0
+flask-cors==4.0.0
 folium==0.15.1
 geographiclib==2.0
 geopandas==0.14.1
