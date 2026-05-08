@@ -4,19 +4,17 @@ import time
 import uuid
 from pathlib import Path
 
-import psutil
+from dotenv import load_dotenv
 from celery import Celery
+
+load_dotenv()
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
 from markupsafe import escape
 
 from rainy_road import (
-    distance_of_coordinates_in_km,
-    get_bbox_graph,
     get_coordinates,
-    get_map,
-    get_radius_graph,
-    get_shortest_route,
+    get_osrm_route_map,
 )
 
 app = Flask(__name__)
@@ -56,8 +54,16 @@ def cleanup_old_maps() -> int:
 
 def make_celery(flask_app: Flask) -> Celery:
     redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-    celery = Celery(flask_app.import_name, broker=redis_url, backend=os.getenv("CELERY_RESULT_BACKEND", redis_url))
-    celery.conf.update(task_track_started=True, result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "7200")))
+    celery = Celery(
+        flask_app.import_name,
+        broker=redis_url,
+        backend=os.getenv("CELERY_RESULT_BACKEND", redis_url),
+    )
+    celery.conf.update(
+        task_track_started=True,
+        result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "7200")),
+        broker_connection_retry_on_startup=True,
+    )
 
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):  # pragma: no cover - Celery wiring
@@ -87,7 +93,6 @@ PROGRESS_PERCENT = {
 }
 
 
-
 def _update_progress(task, stage: str, detail: str = "") -> None:
     if task is None:
         return
@@ -112,78 +117,9 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
     _update_progress(task, "coordinates", "Buscando coordenadas das cidades")
     start_latlng, end_latlng = get_coordinates(start_location, end_location)
 
-    ram_info = psutil.virtual_memory()
-    available_memory_mb = ram_info.available / 1024 / 1024
-    distance_km = distance_of_coordinates_in_km(start_latlng, end_latlng)
-
-    _update_progress(
-        task,
-        "memory_check",
-        f"Distancia aproximada {distance_km:.2f} km e memoria disponivel {available_memory_mb:.0f} MB",
-    )
-
-    attempts = (
-        (
-            "graph_primary",
-            "Gerando rota com vias principais",
-            2,
-            lambda: get_bbox_graph(start_latlng, end_latlng, True, True),
-            "Memoria insuficiente para esta requisicao (M1). \nTente uma rota mais curta.",
-        ),
-        (
-            "graph_secondary",
-            "Gerando rota completa por bounding box",
-            2,
-            lambda: get_bbox_graph(start_latlng, end_latlng, True, False),
-            "Memoria insuficiente para esta requisicao (M2). \nTente uma rota mais curta.",
-        ),
-        (
-            "graph_full",
-            "Gerando rota sem filtros personalizados",
-            8,
-            lambda: get_bbox_graph(start_latlng, end_latlng, False, False),
-            "Memoria insuficiente para esta requisicao (M3). \nTente uma rota mais curta.",
-        ),
-        (
-            "graph_radius",
-            "Gerando rota por raio",
-            14,
-            lambda: get_radius_graph(start_latlng, end_latlng),
-            "Memoria insuficiente para esta requisicao (M4). \nTente uma rota mais curta.",
-        ),
-    )
-
-    last_error = None
-
-    for stage, description, distance_multiplier, graph_builder, memory_error_msg in attempts:
-        if stage == "graph_primary" and distance_km < 10:
-            _update_progress(
-                task,
-                stage,
-                "Distancia curta detectada, pulando rota com vias principais",
-            )
-            last_error = RuntimeError("Distancia insuficiente para rota de vias principais")
-            continue
-
-        _update_progress(task, stage, description)
-
-        if distance_km * distance_multiplier > available_memory_mb:
-            raise MemoryError(memory_error_msg)
-
-        try:
-            graph = graph_builder()
-            _update_progress(task, "route", "Calculando rota mais curta")
-            shortest_route = get_shortest_route(graph, start_latlng, end_latlng)
-            _update_progress(task, "map", "Renderizando mapa")
-            route_map = get_map(graph, shortest_route)
-            break
-        except MemoryError:
-            raise
-        except Exception as exc:
-            last_error = exc
-            continue
-    else:
-        raise RuntimeError("Nao foi possivel gerar o mapa para estas cidades") from last_error
+    _update_progress(task, "route", "Gerando rota com OSRM")
+    _update_progress(task, "map", "Renderizando mapa com dados de chuva")
+    route_map = get_osrm_route_map(start_latlng, end_latlng)
 
     _update_progress(task, "saving", "Salvando mapa em disco")
     map_file_path = _save_map_file(route_map)
@@ -254,7 +190,9 @@ def request_map_generation():
     end_location = _sanitize_location(request.args.get("end_location"))
 
     if not start_location or not end_location:
-        return jsonify({"error": "As cidades de origem e destino sao obrigatorias."}), 400
+        return jsonify(
+            {"error": "As cidades de origem e destino sao obrigatorias."}
+        ), 400
 
     task = generate_map_task.apply_async(args=[start_location, end_location])
     return jsonify({"task_id": task.id}), 202
@@ -265,7 +203,11 @@ def get_task_progress(task_id: str):
     async_result = celery_app.AsyncResult(task_id)
 
     if async_result.state == "PENDING":
-        payload = {"stage": "queued", "percent": PROGRESS_PERCENT["queued"], "detail": "Tarefa na fila"}
+        payload = {
+            "stage": "queued",
+            "percent": PROGRESS_PERCENT["queued"],
+            "detail": "Tarefa na fila",
+        }
         return jsonify({"state": async_result.state, **payload})
 
     if async_result.state == "PROGRESS":
@@ -273,10 +215,19 @@ def get_task_progress(task_id: str):
 
     if async_result.state == "SUCCESS":
         result = async_result.result or {}
-        return jsonify({"state": async_result.state, "stage": "complete", "percent": 100, **result})
+        return jsonify(
+            {"state": async_result.state, "stage": "complete", "percent": 100, **result}
+        )
 
     detail = str(async_result.info)
-    return jsonify({"state": async_result.state, "stage": "failed", "percent": 100, "detail": detail}), 500
+    return jsonify(
+        {
+            "state": async_result.state,
+            "stage": "failed",
+            "percent": 100,
+            "detail": detail,
+        }
+    ), 500
 
 
 @app.route("/result/<task_id>", methods=["GET"])
@@ -296,4 +247,4 @@ def get_task_result(task_id: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=8000)
+    app.run(debug=True, host="0.0.0.0", port=8000)
