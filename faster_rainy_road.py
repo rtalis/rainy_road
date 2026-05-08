@@ -5,10 +5,43 @@ import webbrowser
 import folium
 import requests
 from dotenv import load_dotenv
+from geopy.extra.rate_limiter import RateLimiter
+from geopy.geocoders import Nominatim
 
 load_dotenv()
 OW_API_KEY = os.getenv("OW_API_KEY")
 OSRM_URL = os.getenv("OSRM_BASE_URL", "http://router.project-osrm.org")
+
+
+def get_coordinates(start_location, end_location):
+    locator = Nominatim(user_agent="rainy-road")
+    start_location = (start_location or "").strip()
+    end_location = (end_location or "").strip()
+
+    if not start_location or not end_location:
+        raise ValueError("Os nomes das cidades não podem estar vazios.")
+
+    geocode = RateLimiter(locator.geocode, min_delay_seconds=1, max_retries=0)
+
+    timeout = 10
+    max_attempts = 3
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            start = geocode(start_location, timeout=timeout)
+            end = geocode(end_location, timeout=timeout)
+            if start is None or end is None:
+                raise RuntimeError(
+                    "Geocoding returned no results for one or both locations"
+                )
+            return (start.point, end.point)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_attempts:
+                wait = attempt * 1.5
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"Falha ao geocodificar as cidades: {exc}") from exc
 
 
 def weather_at_point(lat, lng):

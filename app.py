@@ -4,15 +4,12 @@ import time
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv
 from celery import Celery
-
-load_dotenv()
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
 from markupsafe import escape
 
-from rainy_road import (
+from faster_rainy_road import (
     get_coordinates,
     get_osrm_route_map,
 )
