@@ -99,7 +99,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
     local_display_time = (exact_arrival_utc - timedelta(hours=3)).strftime("%H:%M")
 
     # Default safe return
-    no_rain = {"is_rainy": False, "volume": 0.0, "prob": 0, "time": local_display_time}
+    no_rain = {"is_rainy": False, "volume": 0.0, "prob": 0, "time": local_display_time, "provider": "N/A"}
 
     # 1. Google check
     if google_data and "forecastHours" in google_data:
@@ -112,7 +112,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
             rain_mm = target_forecast.get("precipitation", {}).get("qpf", {}).get("quantity", 0)
 
             if precip_prob >= 50 and rain_mm > 0.2:
-                return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "google"}
+                return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Google"}
 
             if not ow_data and not om_data:
                 return no_rain
@@ -136,9 +136,9 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
             rain_mm = precips[target_index]
 
             if precip_prob >= 50 and rain_mm > 0.2:
-                return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "open_meteo"}
+                return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Open Meteo"}
             else:
-                no_rain =  {"is_rainy": False, "volume": rain_mm, "prob": precip_prob, "time": local_display_time}
+                no_rain =  {"is_rainy": False, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Open Meteo"}
         except ValueError:
             pass
 
@@ -151,7 +151,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
             for item in weather_array:
                 if item.get("main") in rainy_ow_conditions:
                     # Dummy high values since OW doesn't give us exact prob/vol here
-                    return {"is_rainy": True, "volume": 2.5, "prob": 90, "time": local_display_time}
+                    return {"is_rainy": True, "volume": 2.5, "prob": 90, "time": local_display_time, "provider": "OpenWeather"}
                 else:
                     return no_rain
 
@@ -164,7 +164,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
                 rain_mm = forecast_list[target_index].get("rain", {}).get("3h", 0) 
                 for item in weather_array:
                     if item.get("main") in rainy_ow_conditions: 
-                        return {"is_rainy": True, "volume": rain_mm, "prob": pop, "time": local_display_time, "provider": "openweather"}
+                        return {"is_rainy": True, "volume": rain_mm, "prob": pop, "time": local_display_time, "provider": "OpenWeather"}
                     else:
                         return no_rain
 
@@ -261,13 +261,15 @@ def get_osrm_route_map(start_latlng, end_latlng):
                         "coords": route_points[previous_index : index + 1],
                         "volume": status["volume"],
                         "prob": status["prob"],
-                        "time": status["time"]
+                        "time": status["time"],
+                        "provider": status["provider"]
                     })
                 segment_data.append({ 
                         "coords": route_points[previous_index : index + 1],
                         "volume": status["volume"],
                         "prob": status["prob"],
-                        "time": status["time"]
+                        "time": status["time"],
+                        "provider": status["provider"]
                     })
                 
             previous_index = index
