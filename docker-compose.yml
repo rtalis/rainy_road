@@ -15,6 +15,7 @@ services:
       - "8000:8000"
     environment:
       - OW_API_KEY=${OW_API_KEY}
+      - GW_API_KEY=${GW_API_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GENERATED_MAPS_DIR=${GENERATED_MAPS_DIR:-generated_maps}
       - MAP_MAX_AGE_SECONDS=${MAP_MAX_AGE_SECONDS:-7200}
