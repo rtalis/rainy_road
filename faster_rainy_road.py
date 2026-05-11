@@ -287,8 +287,8 @@ def get_osrm_route_map(start_latlng, end_latlng):
             <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
             Chegada aprox: <b>{segment['time']}</b><br>
             Volume: <b>{segment['volume']} mm/h</b><br>
-            Probabilidade: <b>{segment['prob']}%</b>
-            Provedor: <b>{segment.get('provider', 'N/A')}</b>
+            Probabilidade: <b>{segment['prob']}%</b><br>
+            Provedor: <b>{segment['provider'] or 'N/A'}</b>
         </div>
         """
         
