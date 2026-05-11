@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # Copy application code
 COPY app.py .
 COPY rainy_road.py .
+COPY faster_rainy_road.py .
 COPY static/ static/
 
 # Create directories
