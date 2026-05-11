@@ -1,8 +1,10 @@
+from datetime import datetime, time, timedelta, timezone
 import math
 import os
 import webbrowser
 
 import folium
+
 import requests
 from dotenv import load_dotenv
 from geopy.extra.rate_limiter import RateLimiter
@@ -12,6 +14,7 @@ load_dotenv()
 OW_API_KEY = os.getenv("OW_API_KEY")
 OSRM_URL = os.getenv("OSRM_BASE_URL", "http://router.project-osrm.org")
 GW_API_KEY = os.getenv("GW_API_KEY")
+OM_ENABLED = os.getenv("OPEN_METEO_ENABLED", "False").lower() in ("true", "1", "yes")
 
 
 def get_coordinates(start_location, end_location):
@@ -45,24 +48,23 @@ def get_coordinates(start_location, end_location):
             raise RuntimeError(f"Falha ao geocodificar as cidades: {exc}") from exc
 
 
-def weather_at_point(lat, lng, travel_time):
-    travel_hour = int(travel_time / 60)
+def weather_at_point(lat, lng, estimated_arrival_minutes):
 
-    if not OW_API_KEY and not GW_API_KEY:
+    # Validate that AT LEAST ONE weather service is available
+    if not OW_API_KEY and not GW_API_KEY and not OM_ENABLED:
         raise RuntimeError(
-            "Neither OpenWeather API key nor Google API KEY is set. Define at least one in the .env file."
+            "No weather services configured. Define OW_API_KEY, GW_API_KEY, or set OPEN_METEO_ENABLED=True in .env"
         )
 
     weather_results = {
         "google": {},
         "openweather": {},
+        "open_meteo": {},
         "ow_type": None,  # Tracks if we fetched 'current' or 'forecast' data
     }
 
-    # 1. Fetch Google Weather (Always fetch this, whether current or forecast)
     if GW_API_KEY:
-        # If travel_hour is 0, we still ask Google for 1 hour to get the current conditions
-        gw_hours = max(1, travel_hour)
+        gw_hours = max(1, estimated_arrival_minutes // 60)
         GW_API_URL = f"https://weather.googleapis.com/v1/forecast/hours:lookup?key={GW_API_KEY}&location.latitude={lat}&location.longitude={lng}&hours={gw_hours}"
         try:
             resp = requests.get(GW_API_URL, timeout=10)
@@ -71,21 +73,16 @@ def weather_at_point(lat, lng, travel_time):
         except requests.RequestException as exc:
             print(f"Warning: Google Weather falhou - {exc}")
 
-    # 2. Fetch OpenWeather
     if OW_API_KEY:
         ow_endpoint = None
 
-        # Scenario A: Current weather (trip < 1 hour) -> check both
-        if travel_hour <= 1:
+        if estimated_arrival_minutes <= 60:
             ow_endpoint = "weather"
             weather_results["ow_type"] = "current"
-
-        # Scenario B: Forecast (trip >= 1 hour) AND flag is enabled -> use forecast API
-        elif travel_hour > 1:
+        elif estimated_arrival_minutes > 60:
             ow_endpoint = "forecast"
             weather_results["ow_type"] = "forecast"
 
-        # Execute OpenWeather Call if an endpoint was selected
         if ow_endpoint:
             OW_API_URL = f"https://api.openweathermap.org/data/2.5/{ow_endpoint}?lat={lat}&lon={lng}&appid={OW_API_KEY}&units=metric"
             try:
@@ -98,16 +95,16 @@ def weather_at_point(lat, lng, travel_time):
     return weather_results
 
 
-def _is_rainy_weather(weather_data, hour):
+def _is_rainy_weather(weather_data, estimated_arrival_minutes):
     google_data = weather_data.get("google", {})
     ow_data = weather_data.get("openweather", {})
+    om_data = weather_data.get("open_meteo", {})
     ow_type = weather_data.get("ow_type")
 
     if google_data and "forecastHours" in google_data:
         forecasts = google_data.get("forecastHours", [])
         if forecasts:
-            # hour=0 means we want index 0. hour=2 means index 1.
-            target_index = max(0, min(hour - 1, len(forecasts) - 1)) if hour > 0 else 0
+            target_index = max(0, min(estimated_arrival_minutes // 60 - 1, len(forecasts) - 1)) if estimated_arrival_minutes > 0 else 0
             target_forecast = forecasts[target_index]
 
             precip_prob = (
@@ -115,11 +112,44 @@ def _is_rainy_weather(weather_data, hour):
                 .get("probability", {})
                 .get("percent", 0)
             )
+            print(
+                f"GOOGLE WEATHER: {precip_prob}% at {target_forecast.get('displayDateTime', {}).get('hours')}h"
+            )
+
             if precip_prob >= 50:
                 return True
 
-            if not ow_data:
+            if not ow_data and not om_data:
                 return False
+
+    if om_data and "hourly" in om_data:
+        hourly = om_data["hourly"]
+        times = hourly.get("time", [])
+        probs = hourly.get("precipitation_probability", [])
+        precips = hourly.get("precipitation", [])
+
+        # Calculate arrival time matching Open-Meteo's GMT (UTC) strings
+        arrival_time = datetime.now(timezone.utc) + timedelta(minutes=estimated_arrival_minutes)
+        if arrival_time.minute >= 30:
+            arrival_time += timedelta(hours=1)
+        arrival_time_str = arrival_time.strftime("%Y-%m-%dT%H:00")
+
+        try:
+            target_index = times.index(arrival_time_str)
+            precip_prob = probs[target_index]
+            rain_mm = precips[target_index]
+
+            print(
+                f"OPEN-METEO: {precip_prob}% prob, {rain_mm}mm rain at {arrival_time_str}"
+            )
+
+            if precip_prob >= 50 and rain_mm > 0.2:
+                return True
+
+        except ValueError:
+            print(
+                f"OPEN-METEO: Tempo de chegada {arrival_time_str} fora do limite da previsão."
+            )
 
     if ow_data:
         rainy_ow_conditions = {"Rain", "Snow", "Thunderstorm", "Drizzle"}
@@ -127,27 +157,48 @@ def _is_rainy_weather(weather_data, hour):
         if ow_type == "current":
             weather_array = ow_data.get("weather", [])
             for item in weather_array:
+                print(f"OPENWEATHER atual: {item.get('main')}")
                 if item.get("main") in rainy_ow_conditions:
-                    print(f"OpenWeather condição atual: {item.get('main')}")
                     return True
 
         elif ow_type == "forecast":
             forecast_list = ow_data.get("list", [])
             if forecast_list:
-                # OW returns data in 3-hour increments.
-                # If travel_hour is 4, we want index 1 (hours 3-6).
-                # If travel_hour is 7, we want index 2 (hours 6-9).
-                target_index = min(hour // 3, len(forecast_list) - 1)
+                target_index = int(min(estimated_arrival_minutes // 180, len(forecast_list) - 1))
                 target_forecast = forecast_list[target_index]
 
                 weather_array = target_forecast.get("weather", [])
+
                 for item in weather_array:
-                    if item.get("main") in rainy_ow_conditions:
-                        print(f"OpenWeather condição forecast: {item.get('main')}")
+                    print(f"OPENWEATHER forecast: {item.get('main')})")
+                    if item.get("main") in rainy_ow_conditions: 
                         return True
 
+    # If all available services report no rain, return False
     return False
 
+
+
+def get_lats_longs_from_route(sample_indexes, route_points):
+    lats = [route_points[i][0] for i in sample_indexes]
+    lons = [route_points[i][1] for i in sample_indexes]
+    lat_str = ",".join(map(str, lats))
+    lon_str = ",".join(map(str, lons))
+    return lat_str, lon_str
+
+
+def get_open_meteo_batch_weather(lats, lons):
+    om_url = f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&hourly=precipitation_probability,precipitation,rain&forecast_days=2"
+    bulk_weather_data = []         
+    try:
+        om_resp = requests.get(om_url, timeout=10)
+        om_resp.raise_for_status()
+        bulk_weather_data = om_resp.json() 
+        if isinstance(bulk_weather_data, dict):
+            bulk_weather_data = [bulk_weather_data]
+    except requests.RequestException as exc:
+        print(f"Warning: Bulk Open-Meteo request failed - {exc}")
+    return bulk_weather_data
 
 def get_osrm_route_map(start_latlng, end_latlng):
     # OSRM expects lon,lat.
@@ -178,27 +229,37 @@ def get_osrm_route_map(start_latlng, end_latlng):
     route_len = len(route_points)
     duration = data["routes"][0]["legs"][0]["duration"] / 60
     rainy_segments = []
-    if route_len > 2:
+    if route_len >= 2:
         sample_count = int((math.sqrt(route_len) / max(math.log10(route_len), 1)) + 2)
         sample_count = max(2, min(sample_count, route_len))
         leap = max(1, route_len // sample_count)
         sample_indexes = list(range(leap, route_len, leap))
         if sample_indexes[-1] != route_len - 1:
             sample_indexes.append(route_len - 1)
+            
+        open_meteo_weather_data = []
+        lats, longs = get_lats_longs_from_route(sample_indexes, route_points) #Get all lattitudes and longitudes in one to request weather data in batch (if supported by the API)
+        if OM_ENABLED:
+            open_meteo_weather_data = get_open_meteo_batch_weather(lats, longs)
 
+        
         previous_index = 0
-        travel_time_hours = duration / 60
-        travel_time_ceil = math.ceil(travel_time_hours)
-        hour_split = math.ceil(len(sample_indexes) / travel_time_ceil)  # 4
-        position = 1
-        for index in sample_indexes:
-            hour = min(position // hour_split, travel_time_ceil - 1)  # 0,0,0,0,1,1,1,1,2,2,2,2
+        for i, index in enumerate(sample_indexes):
             lat, lon = route_points[index]
-            node_weather = weather_at_point(lat, lon, duration)
-            if _is_rainy_weather(node_weather, hour):
+            
+            route_fraction = index / route_len
+            estimated_arrival_minutes = route_fraction * duration
+            
+            node_weather = weather_at_point(lat, lon, estimated_arrival_minutes)
+            
+            if open_meteo_weather_data and i < len(open_meteo_weather_data):
+                node_weather["open_meteo"] = open_meteo_weather_data[i]
+                
+            # Now the dictionary is full, and this function will actually read it:
+            if _is_rainy_weather(node_weather, estimated_arrival_minutes):
                 rainy_segments.append(route_points[previous_index : index + 1])
+                
             previous_index = index
-            position += 1
 
     mid_lat = (start_lat + end_lat) / 2
     mid_lon = (start_lon + end_lon) / 2
