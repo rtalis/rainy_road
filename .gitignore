@@ -32,6 +32,7 @@ MANIFEST
 
 generated_maps/
 route_map.html
+.geocode_cache.json
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

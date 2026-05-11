@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta, timezone
+import json
 import math
 import os
 import webbrowser
@@ -7,39 +8,86 @@ import folium
 import requests
 from dotenv import load_dotenv
 from geopy.extra.rate_limiter import RateLimiter
-from geopy.geocoders import Nominatim
+from geopy.geocoders import Nominatim, Photon
 
 load_dotenv()
 OW_API_KEY = os.getenv("OW_API_KEY")
 OSRM_URL = os.getenv("OSRM_BASE_URL", "http://router.project-osrm.org")
 GW_API_KEY = os.getenv("GW_API_KEY")
 OM_ENABLED = os.getenv("OPEN_METEO_ENABLED", "False").lower() in ("true", "1", "yes")
+PHOTON_ENABLED = os.getenv("PHOTON_ENABLED", "False").lower() in ("true", "1", "yes")
+
+# Simple file-based cache for geocoding results
+GEOCODE_CACHE_FILE = ".geocode_cache.json"
+
+def _load_geocode_cache():
+    """Load geocoding cache from file."""
+    if os.path.exists(GEOCODE_CACHE_FILE):
+        try:
+            with open(GEOCODE_CACHE_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _save_geocode_cache(cache):
+    """Save geocoding cache to file."""
+    try:
+        with open(GEOCODE_CACHE_FILE, "w") as f:
+            json.dump(cache, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save geocode cache - {e}")
 
 
 def get_coordinates(start_location, end_location):
-    locator = Nominatim(user_agent="rainy-road")
     start_location = (start_location or "").strip()
     end_location = (end_location or "").strip()
 
     if not start_location or not end_location:
         raise ValueError("Os nomes das cidades não podem estar vazios.")
 
-    geocode = RateLimiter(locator.geocode, min_delay_seconds=1, max_retries=0)
+    cache = _load_geocode_cache()
+    cache_key_start = f"geo:{start_location}"
+    cache_key_end = f"geo:{end_location}"
+    
+    if cache_key_start in cache and cache_key_end in cache:
+        start_coords = tuple(cache[cache_key_start])
+        end_coords = tuple(cache[cache_key_end])
+        return (start_coords, end_coords)
 
     timeout = 10
     max_attempts = 3
+    if PHOTON_ENABLED:
+        locator = Photon(user_agent="rainy-road")
+    else:
+        locator = Nominatim(user_agent="rainy-road")
+    
+    geocode = RateLimiter(locator.geocode, min_delay_seconds=1, max_retries=0)
+    
+    start = None
+    end = None
+    
     for attempt in range(1, max_attempts + 1):
         try:
             start = geocode(start_location, timeout=timeout)
             end = geocode(end_location, timeout=timeout)
             if start is None or end is None:
                 raise RuntimeError("Geocoding returned no results for one or both locations")
-            return (start.point, end.point)
+            
+            # Cache the results
+            start_coords = start.point
+            end_coords = end.point
+            cache[cache_key_start] = list(start_coords)
+            cache[cache_key_end] = list(end_coords)
+            _save_geocode_cache(cache)
+            
+            return (start_coords, end_coords)
         except Exception as exc:
             if attempt < max_attempts:
                 time.sleep(attempt * 1.5)
                 continue
-            raise RuntimeError(f"Falha ao geocodificar as cidades: {exc}") from exc
+            provider = "Photon" if PHOTON_ENABLED else "Nominatim"
+            raise RuntimeError(f"Falha ao geocodificar as cidades ({provider}): {exc}") from exc
 
 
 def weather_at_point(lat, lng, estimated_arrival_minutes):
@@ -197,7 +245,7 @@ def get_rain_color(volume_mm):
     return "#cc0000"                       # Deep Red (Heavy Rain / Danger)
 
 
-def get_osrm_route_map(start_latlng, end_latlng):
+def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_location="Destino"):
     start_lon, start_lat = start_latlng[1], start_latlng[0]
     end_lon, end_lat = end_latlng[1], end_latlng[0]
 
@@ -221,6 +269,7 @@ def get_osrm_route_map(start_latlng, end_latlng):
     route_points = [(lat, lon) for lon, lat in coordinates]
     route_len = len(route_points)
     duration = data["routes"][0]["legs"][0]["duration"] / 60
+    distance_km = data["routes"][0]["distance"] / 1000
     
     rainy_segments = []
     segment_data = []
@@ -302,8 +351,8 @@ def get_osrm_route_map(start_latlng, end_latlng):
             tooltip=folium.Tooltip(tooltip_html)
         ).add_to(route_map)
 
-    folium.Marker([start_lat, start_lon], popup="Start").add_to(route_map)
-    folium.Marker([end_lat, end_lon], popup="End").add_to(route_map)
+    folium.Marker([start_lat, start_lon], popup="Inicio").add_to(route_map)
+    folium.Marker([end_lat, end_lon], popup="Destino").add_to(route_map)
     
     return route_map
 
