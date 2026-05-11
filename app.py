@@ -124,10 +124,33 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
     return map_file_path
 
 
+def create_map_with_coordinates(start_latlng: tuple[float], end_latlng: tuple[float], task=None) -> str:
+    _update_progress(task, "route", "Gerando rota com OSRM")
+    _update_progress(task, "map", "Renderizando mapa com dados de chuva")
+    route_map = get_osrm_route_map(start_latlng, end_latlng)
+
+    _update_progress(task, "saving", "Salvando mapa em disco")
+    map_file_path = _save_map_file(route_map)
+    _update_progress(task, "complete", "Mapa gerado com sucesso")
+    return map_file_path
+
+
 @celery_app.task(bind=True, name="generate_map_task")
 def generate_map_task(self, start_location: str, end_location: str) -> dict:
     try:
         map_path = create_map(start_location, end_location, task=self)
+        return {"map_file": map_path}
+    except Exception as exc:  # pragma: no cover - Celery handles logging
+        _update_progress(self, "failed", str(exc))
+        raise
+
+@celery_app.task(bind=True, name="generate_map_with_coordinates_task")
+def generate_map_with_coordinates_task(self, start_latlng: tuple[float], end_latlng: tuple[float]) -> dict:
+    start_latlng = (start_latlng[0], start_latlng[1])
+    end_latlng = (end_latlng[0], end_latlng[1])
+    print(f"Received coordinates: start={start_latlng}, end={end_latlng}")
+    try:
+        map_path = create_map_with_coordinates(start_latlng, end_latlng, task=self)
         return {"map_file": map_path}
     except Exception as exc:  # pragma: no cover - Celery handles logging
         _update_progress(self, "failed", str(exc))
@@ -149,7 +172,7 @@ def index():
 def generate_map_legacy():
     start_location = _sanitize_location(request.args.get("start_location"))
     end_location = _sanitize_location(request.args.get("end_location"))
-
+    
     if not start_location or not end_location:
         return Response(
             "<center><h1>As cidades de origem e destino sao obrigatorias.</h1></center>",
@@ -185,13 +208,29 @@ def generate_map_legacy():
 def request_map_generation():
     start_location = _sanitize_location(request.args.get("start_location"))
     end_location = _sanitize_location(request.args.get("end_location"))
-
-    if not start_location or not end_location:
-        return jsonify(
-            {"error": "As cidades de origem e destino sao obrigatorias."}
-        ), 400
-
-    task = generate_map_task.apply_async(args=[start_location, end_location])
+    start_lat = request.args.get("start_lat")
+    start_lon = request.args.get("start_lon")
+    end_lat = request.args.get("end_lat")
+    end_lon = request.args.get("end_lon")
+    
+    if start_lat and start_lon and end_lat and end_lon:
+        try:
+            start_latlng = (float(start_lat), float(start_lon))
+            end_latlng = (float(end_lat), float(end_lon))
+            task = generate_map_with_coordinates_task.apply_async(args=[start_latlng, end_latlng])
+        except ValueError:  
+            if not start_location or not end_location:
+                return jsonify(
+                    {"error": "As cidades de origem e destino sao obrigatorias."}
+                ), 400
+            task = generate_map_task.apply_async(args=[start_location, end_location])
+    else:
+        if not start_location or not end_location:
+            return jsonify(
+                {"error": "As cidades de origem e destino sao obrigatorias."}
+            ), 400
+        task = generate_map_task.apply_async(args=[start_location, end_location])
+    
     return jsonify({"task_id": task.id}), 202
 
 
