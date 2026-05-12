@@ -243,8 +243,9 @@ def get_rain_color(volume_mm):
     """Returns a color hex code based on rain intensity."""
     if volume_mm <= 0.2: return "#00c600"  # Green (Light or No Rain)
     if volume_mm <= 0.5: return "#3388ff"  # Light Blue (Drizzle)
-    if volume_mm <= 3.0: return "#800080"  # Purple (Moderate Rain)
-    return "#cc0000"                       # Deep Red (Heavy Rain / Danger)
+    if volume_mm <= 1.5: return "#ffff00"  # Yellow (Light Rain)
+    if volume_mm <= 3.0: return "#ff8800"  # Orange (Moderate Rain)
+    return "#cc0000"    # Deep Red (Heavy Rain / Danger)
 
 
 def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_location="Destino"):
