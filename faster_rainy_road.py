@@ -243,12 +243,12 @@ def get_rain_color(volume_mm):
     """Returns a color hex code based on rain intensity."""
     if volume_mm <= 0.2: return "#00c600"  # Green (Light or No Rain)
     if volume_mm <= 0.5: return "#3388ff"  # Light Blue (Drizzle)
-    if volume_mm <= 1.5: return "#ffff00"  # Yellow (Light Rain)
+    if volume_mm <= 1.5: return "#d8d84a"  # Yellow (Light Rain)
     if volume_mm <= 3.0: return "#ff8800"  # Orange (Moderate Rain)
     return "#cc0000"    # Deep Red (Heavy Rain / Danger)
 
 
-def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_location="Destino"):
+def get_osrm_route_map(start_latlng, end_latlng):
     start_lon, start_lat = start_latlng[1], start_latlng[0]
     end_lon, end_lat = end_latlng[1], end_latlng[0]
 
@@ -272,7 +272,6 @@ def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_lo
     route_points = [(lat, lon) for lon, lat in coordinates]
     route_len = len(route_points)
     duration = data["routes"][0]["legs"][0]["duration"] / 60
-    distance_km = data["routes"][0]["distance"] / 1000
     
     rainy_segments = []
     segment_data = []
@@ -379,8 +378,8 @@ def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_lo
 
 
 if __name__ == "__main__":
-    start_latlng = (-3.121570, -40.149883)
-    end_latlng = (-3.682920, -40.350899)
+    start_latlng = (-3.761389, -40.344722) 
+    end_latlng = (-3.731862, -38.526669)  
     route_map = get_osrm_route_map(start_latlng, end_latlng)
     route_map.save("route_map.html")
     webbrowser.open("route_map.html")
