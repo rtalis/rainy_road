@@ -161,7 +161,8 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
 
             if precip_prob >= 50 and rain_mm > 0.2:
                 return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Google"}
-
+            else:
+                no_rain = {"is_rainy": False, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Google"}
             if not ow_data and not om_data:
                 return no_rain
 
@@ -343,16 +344,34 @@ def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_lo
         </div>
         """
         
+        # Invisible thicker line underneath for better clickability
         folium.PolyLine(
             segment["coords"], 
             color=segment_color, 
-            weight=7, # Made it slightly thicker so it stands out over the green line
+            weight=20,  
+            opacity=0, 
+            tooltip=folium.Tooltip(tooltip_html)
+        ).add_to(route_map)
+        
+        # Visible line on top
+        folium.PolyLine(
+            segment["coords"], 
+            color=segment_color, 
+            weight=7, 
             opacity=1,
             tooltip=folium.Tooltip(tooltip_html)
         ).add_to(route_map)
 
     folium.Marker([start_lat, start_lon], popup="Inicio").add_to(route_map)
     folium.Marker([end_lat, end_lon], popup="Destino").add_to(route_map)
+    
+    # Auto-zoom to fit all route points
+    if route_points:
+        min_lat = min(p[0] for p in route_points)
+        max_lat = max(p[0] for p in route_points)
+        min_lon = min(p[1] for p in route_points)
+        max_lon = max(p[1] for p in route_points)
+        route_map.fit_bounds([(min_lat, min_lon), (max_lat, max_lon)])
     
     return route_map
 
