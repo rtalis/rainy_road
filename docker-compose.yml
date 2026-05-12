@@ -16,6 +16,7 @@ services:
     environment:
       - OW_API_KEY=${OW_API_KEY}
       - PHOTON_ENABLED=${PHOTON_ENABLED}
+      - OPEN_METEO_ENABLED=${OPEN_METEO_ENABLED}
       - GW_API_KEY=${GW_API_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GENERATED_MAPS_DIR=${GENERATED_MAPS_DIR:-generated_maps}
@@ -37,6 +38,7 @@ services:
     environment:
       - OW_API_KEY=${OW_API_KEY}
       - PHOTON_ENABLED=${PHOTON_ENABLED}
+      - OPEN_METEO_ENABLED=${OPEN_METEO_ENABLED}
       - GW_API_KEY=${GW_API_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GENERATED_MAPS_DIR=${GENERATED_MAPS_DIR:-generated_maps}

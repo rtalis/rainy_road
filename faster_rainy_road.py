@@ -168,6 +168,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
 
     # 2. Open-Meteo check
     if om_data and "hourly" in om_data:
+        print(f"Debug: Open-Meteo data keys: {om_data.keys()}")
         hourly = om_data["hourly"]
         times = hourly.get("time", [])
         probs = hourly.get("precipitation_probability", [])
@@ -183,7 +184,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
             target_index = times.index(arrival_time_str)
             precip_prob = probs[target_index]
             rain_mm = precips[target_index]
-
+            print(f"Debug: Open-Meteo lookup - Time: {arrival_time_str}, Prob: {precip_prob}%, Precip: {rain_mm}mm")
             if precip_prob >= 50 and rain_mm > 0.2:
                 return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Open Meteo"}
             else:
@@ -335,7 +336,7 @@ def get_osrm_route_map(start_latlng, end_latlng, start_location="Origem", end_lo
         # Build the HTML Tooltip
         tooltip_html = f"""
         <div style='font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
-            <b>🌧️ Alerta de Chuva</b><br>
+            <b>💭 Informações sobre este ponto</b><br>
             <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
             Chegada aprox: <b>{segment['time']}</b><br>
             Volume: <b>{segment['volume']} mm/h</b><br>
