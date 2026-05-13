@@ -11,7 +11,7 @@ from markupsafe import escape
 
 from faster_rainy_road import (
     get_coordinates,
-    get_osrm_route_map,
+    get_route_map,
 )
 
 app = Flask(__name__)
@@ -116,7 +116,7 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
 
     _update_progress(task, "route", "Gerando rota com OSRM")
     _update_progress(task, "map", "Renderizando mapa com dados de chuva")
-    route_map = get_osrm_route_map(start_latlng, end_latlng)
+    route_map = get_route_map(start_latlng, end_latlng)
 
     _update_progress(task, "saving", "Salvando mapa em disco")
     map_file_path = _save_map_file(route_map)
@@ -127,7 +127,7 @@ def create_map(start_location: str, end_location: str, task=None) -> str:
 def create_map_with_coordinates(start_latlng: tuple[float], end_latlng: tuple[float], task=None) -> str:
     _update_progress(task, "route", "Gerando rota com OSRM")
     _update_progress(task, "map", "Renderizando mapa com dados de chuva")
-    route_map = get_osrm_route_map(start_latlng, end_latlng)
+    route_map = get_route_map(start_latlng, end_latlng)
 
     _update_progress(task, "saving", "Salvando mapa em disco")
     map_file_path = _save_map_file(route_map)

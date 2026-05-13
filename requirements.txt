@@ -26,6 +26,7 @@ numpy==1.26.2
 osmnx==1.8.0
 packaging==23.2
 pandas==2.1.4
+polyline==2.0.4
 psutil==5.9.7
 pyproj==3.6.1
 python-dateutil==2.8.2

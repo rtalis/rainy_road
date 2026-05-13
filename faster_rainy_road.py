@@ -3,7 +3,7 @@ import json
 import math
 import os
 import webbrowser
-
+import polyline
 import folium
 import requests
 from dotenv import load_dotenv
@@ -13,12 +13,14 @@ from geopy.geocoders import Nominatim, Photon
 load_dotenv()
 OW_API_KEY = os.getenv("OW_API_KEY")
 OSRM_URL = os.getenv("OSRM_BASE_URL", "http://router.project-osrm.org")
+VALHALLA_URL = os.getenv("VALHALLA_BASE_URL", "https://valhalla1.openstreetmap.de")
 GW_API_KEY = os.getenv("GW_API_KEY")
 OM_ENABLED = os.getenv("OPEN_METEO_ENABLED", "False").lower() in ("true", "1", "yes")
 PHOTON_ENABLED = os.getenv("PHOTON_ENABLED", "False").lower() in ("true", "1", "yes")
 
 # Simple file-based cache for geocoding results
 GEOCODE_CACHE_FILE = ".geocode_cache.json"
+
 
 def _load_geocode_cache():
     """Load geocoding cache from file."""
@@ -184,7 +186,7 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
             target_index = times.index(arrival_time_str)
             precip_prob = probs[target_index]
             rain_mm = precips[target_index]
-            print(f"Debug: Open-Meteo lookup - Time: {arrival_time_str}, Prob: {precip_prob}%, Precip: {rain_mm}mm")
+            #print(f"Debug: Open-Meteo lookup - Time: {arrival_time_str}, Prob: {precip_prob}%, Precip: {rain_mm}mm")
             if precip_prob >= 50 and rain_mm > 0.2:
                 return {"is_rainy": True, "volume": rain_mm, "prob": precip_prob, "time": local_display_time, "provider": "Open Meteo"}
             else:
@@ -247,31 +249,17 @@ def get_rain_color(volume_mm):
     if volume_mm <= 3.0: return "#ff8800"  # Orange (Moderate Rain)
     return "#cc0000"    # Deep Red (Heavy Rain / Danger)
 
-
-def get_osrm_route_map(start_latlng, end_latlng):
-    start_lon, start_lat = start_latlng[1], start_latlng[0]
-    end_lon, end_lat = end_latlng[1], end_latlng[0]
-
-    url = f"{OSRM_URL}/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
-
-    try:
-        response = requests.get(url, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Erro ao consultar OSRM: {exc}") from exc
-
-    if data.get("code") != "Ok":
-        raise RuntimeError("OSRM could not find a route.")
-
-    route_geometry = data["routes"][0]["geometry"]
-    coordinates = route_geometry.get("coordinates", [])
-    if len(coordinates) < 2:
-        raise RuntimeError("OSRM retornou rota invalida.")
-
-    route_points = [(lat, lon) for lon, lat in coordinates]
+def get_map(route_data, start_latlng, end_latlng, destination_info=None):
+    """
+    Generates a Folium map with weather data along the route.
+    Expects route_data dictionary with 'route_points' and 'duration'.
+    destination_info is an optional dict with route metadata.
+    """
+    # Extract standardized data
+    route_points = route_data["route_points"]
+    duration = route_data["duration"]
+    
     route_len = len(route_points)
-    duration = data["routes"][0]["legs"][0]["duration"] / 60
     
     rainy_segments = []
     segment_data = []
@@ -281,11 +269,14 @@ def get_osrm_route_map(start_latlng, end_latlng):
         sample_count = max(2, min(sample_count, route_len))
         leap = max(1, route_len // sample_count)
         sample_indexes = list(range(leap, route_len, leap))
+        
         if sample_indexes[-1] != route_len - 1:
             sample_indexes.append(route_len - 1)
             
         open_meteo_weather_data = []
         lats, longs = get_lats_longs_from_route(sample_indexes, route_points)
+        
+        mid_lat, mid_lon = (route_points[0][0] + route_points[-1][0]) / 2, (route_points[0][1] + route_points[-1][1]) / 2
         
         if OM_ENABLED:
             open_meteo_weather_data = get_open_meteo_batch_weather(lats, longs)
@@ -306,7 +297,6 @@ def get_osrm_route_map(start_latlng, end_latlng):
             status = _get_weather_status(node_weather, estimated_arrival_minutes)
             
             if status:
-                
                 if status["is_rainy"] == True:
                     rainy_segments.append({
                         "coords": route_points[previous_index : index + 1],
@@ -325,8 +315,6 @@ def get_osrm_route_map(start_latlng, end_latlng):
                 
             previous_index = index
 
-
-    mid_lat, mid_lon = (start_lat + end_lat) / 2, (start_lon + end_lon) / 2
     route_map = folium.Map(location=[mid_lat, mid_lon], zoom_start=9, tiles="CartoDB positron")
     
     for segment in segment_data:
@@ -363,8 +351,17 @@ def get_osrm_route_map(start_latlng, end_latlng):
             tooltip=folium.Tooltip(tooltip_html)
         ).add_to(route_map)
 
-    folium.Marker([start_lat, start_lon], popup="Inicio").add_to(route_map)
-    folium.Marker([end_lat, end_lon], popup="Destino").add_to(route_map)
+    folium.Marker([start_latlng[0], start_latlng[1]], popup="Inicio").add_to(route_map)
+    
+    # Build destination popup with route info
+    dest_popup_html = "Destino"
+    if destination_info:
+        travel_time = destination_info.get("tempo_de_viagem", "N/A")
+        provider = destination_info.get("route_provider", "N/A")
+        if isinstance(travel_time, (int, float)):
+            dest_popup_html = f"""<b>Destino</b><br>Tempo: {travel_time:.1f} min<br>Provedor: {provider}"""
+    
+    folium.Marker([end_latlng[0], end_latlng[1]], popup=dest_popup_html).add_to(route_map)
     
     # Auto-zoom to fit all route points
     if route_points:
@@ -376,10 +373,132 @@ def get_osrm_route_map(start_latlng, end_latlng):
     
     return route_map
 
+def get_osrm_route_json(start_latlng, end_latlng):
+    start_lon, start_lat = start_latlng[1], start_latlng[0]
+    end_lon, end_lat = end_latlng[1], end_latlng[0]
+
+    url = f"{OSRM_URL}/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
+
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Erro ao consultar OSRM: {exc}") from exc
+
+    if data.get("code") != "Ok":
+        raise RuntimeError("OSRM could not find a route.")
+    
+    return data
+
+def get_valhalla_route_json(start_latlng, end_latlng, mode="auto"):
+    start_lon, start_lat = start_latlng[1], start_latlng[0]
+    end_lon, end_lat = end_latlng[1], end_latlng[0]
+
+    url = f"{VALHALLA_URL}/route"
+    payload = {
+        "locations": [
+            {"lat": start_lat, "lon": start_lon}, 
+            {"lat": end_lat, "lon": end_lon}
+            
+        ],
+        "costing": mode,
+        "directions_options": {
+            "units": "kilometers"        
+            }
+        }
+    try:
+        response = requests.post(url, json=payload, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Erro ao consultar Valhalla: {exc}") from exc
+
+    if data.get("trip") and data["trip"].get("status") != 0:
+        raise RuntimeError("Valhalla could not find a route.")
+    
+    return data
+
+def get_osrm_route_data(data):
+    """
+    Extracts route points and duration from an OSRM response.
+    Expects OSRM to be called with geometries=geojson.
+    """
+    route_geometry = data["routes"][0]["geometry"]
+    coordinates = route_geometry.get("coordinates", [])
+    
+    if len(coordinates) < 2:
+        raise RuntimeError("OSRM retornou rota invalida.")
+
+    # OSRM GeoJSON returns [lon, lat], we flip it to (lat, lon)
+    route_points = [(lat, lon) for lon, lat in coordinates]
+    
+    # OSRM duration is in seconds, convert to minutes
+    duration = data["routes"][0]["legs"][0]["duration"] / 60 
+    
+    return {
+        "route_points": route_points,
+        "duration": duration
+    }
+
+def get_valhalla_route_data(data):
+    """
+    Extracts route points and duration from a Valhalla response.
+    """
+    try:
+        # Valhalla returns an encoded polyline string in the shape parameter
+        shape = data["trip"]["legs"][0]["shape"]
+        
+        # Valhalla uses a polyline precision of 6
+        route_points = polyline.decode(shape, 6) 
+        
+        if len(route_points) < 2:
+            raise RuntimeError("Valhalla retornou rota invalida.")
+            
+        # Valhalla time is in seconds, convert to minutes
+        duration = data["trip"]["summary"]["time"] / 60
+        return {
+            "route_points": route_points,
+            "duration": duration
+        }
+    except KeyError:
+        raise RuntimeError("Falha ao analisar os dados do Valhalla.")
+   
+def get_route_map(start_latlng, end_latlng):
+    try:
+        destomation_info = {}
+        destomation_info["start"] = start_latlng
+        destomation_info["end"] = end_latlng
+        
+        osrm_json = get_osrm_route_json(start_latlng, end_latlng)
+        route_data = get_osrm_route_data(osrm_json)
+        destomation_info["route_provider"] = "OSRM"
+        destomation_info["tempo_de_viagem"] = route_data["duration"]
+        return get_map(route_data, start_latlng, end_latlng, destomation_info)
+    except Exception as exc:
+        print(f" OSRM falhou: {exc}. Tentando Valhalla como fallback.")   
+        valhalla_json = get_valhalla_route_json(start_latlng, end_latlng)
+        route_data = get_valhalla_route_data(valhalla_json)
+        destomation_info["route_provider"] = "Valhalla"
+        destomation_info["tempo_de_viagem"] = route_data["duration"]
+        return get_map(route_data, start_latlng, end_latlng, destomation_info)
 
 if __name__ == "__main__":
+    
+    
     start_latlng = (-3.761389, -40.344722) 
     end_latlng = (-3.731862, -38.526669)  
-    route_map = get_osrm_route_map(start_latlng, end_latlng)
+    #start_coords, end_coords = get_coordinates("SÂO PAULO, SP, BRASIL", "RIO DE JANEIRO, RJ, BRASIL")
+    #start_latlng = start_coords
+    #end_latlng = end_coords
+    
+    
+    valhalla_json = get_valhalla_route_json(start_latlng, end_latlng)
+    route_map_data = get_valhalla_route_data(valhalla_json)
+    route_map = get_map(route_map_data, start_latlng, end_latlng)
+    route_map.save("valhalla_route_map.html")
+    osrm_json = get_osrm_route_json(start_latlng, end_latlng)
+    route_map_data = get_osrm_route_data(osrm_json)
+    route_map = get_map(route_map_data,start_latlng, end_latlng)
     route_map.save("route_map.html")
     webbrowser.open("route_map.html")
