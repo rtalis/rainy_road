@@ -20,6 +20,7 @@ COPY app.py .
 COPY rainy_road.py .
 COPY faster_rainy_road.py .
 COPY static/ static/
+COPY utils.py .
 
 # Create directories
 RUN mkdir -p generated_maps cache

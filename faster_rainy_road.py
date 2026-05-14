@@ -9,6 +9,7 @@ import requests
 from dotenv import load_dotenv
 from geopy.extra.rate_limiter import RateLimiter
 from geopy.geocoders import Nominatim, Photon
+from utils import get_error_html
 
 load_dotenv()
 OW_API_KEY = os.getenv("OW_API_KEY")
@@ -170,7 +171,6 @@ def _get_weather_status(weather_data, estimated_arrival_minutes):
 
     # 2. Open-Meteo check
     if om_data and "hourly" in om_data:
-        print(f"Debug: Open-Meteo data keys: {om_data.keys()}")
         hourly = om_data["hourly"]
         times = hourly.get("time", [])
         probs = hourly.get("precipitation_probability", [])
@@ -356,10 +356,20 @@ def get_map(route_data, start_latlng, end_latlng, destination_info=None):
     # Build destination popup with route info
     dest_popup_html = "Destino"
     if destination_info:
-        travel_time = destination_info.get("tempo_de_viagem", "N/A")
+        travel_time = destination_info.get("trip_time", "N/A")
+        trip_estimated_arrival = (datetime.now() + timedelta(minutes=travel_time)).strftime("%H:%M") if isinstance(travel_time, (int, float)) else "N/A"
         provider = destination_info.get("route_provider", "N/A")
+        distance = int(destination_info.get("distance", "N/A"))
         if isinstance(travel_time, (int, float)):
-            dest_popup_html = f"""<b>Destino</b><br>Tempo: {travel_time:.1f} min<br>Provedor: {provider}"""
+            dest_popup_html = f"""
+                            <div style='width: 230px; font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
+                            <b>Destino</b><br>
+                            <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
+                            Hora de chegada estimada: <b>{trip_estimated_arrival}</b><br>
+                            Provedor de rota: <b>{provider}</b></br>
+                            Distancia estimada: <b>{distance} km</b><br>
+                            </div>
+                            """
     
     folium.Marker([end_latlng[0], end_latlng[1]], popup=dest_popup_html).add_to(route_map)
     
@@ -380,7 +390,7 @@ def get_osrm_route_json(start_latlng, end_latlng):
     url = f"{OSRM_URL}/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
 
     try:
-        response = requests.get(url, timeout=20)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as exc:
@@ -408,11 +418,11 @@ def get_valhalla_route_json(start_latlng, end_latlng, mode="auto"):
             }
         }
     try:
-        response = requests.post(url, json=payload, timeout=20)
+        response = requests.post(url, json=payload, timeout=12)
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as exc:
-        raise RuntimeError(f"Erro ao consultar Valhalla: {exc}") from exc
+        raise RuntimeError(f"Erro ao consultar Valhalla: {response.json().get('error', 'Unknown error')} \n\n {exc}") from exc
 
     if data.get("trip") and data["trip"].get("status") != 0:
         raise RuntimeError("Valhalla could not find a route.")
@@ -435,10 +445,12 @@ def get_osrm_route_data(data):
     
     # OSRM duration is in seconds, convert to minutes
     duration = data["routes"][0]["legs"][0]["duration"] / 60 
+    distance = data["routes"][0]["legs"][0]["distance"] / 1000 
     
     return {
         "route_points": route_points,
-        "duration": duration
+        "duration": duration,
+        "distance": distance
     }
 
 def get_valhalla_route_data(data):
@@ -457,48 +469,50 @@ def get_valhalla_route_data(data):
             
         # Valhalla time is in seconds, convert to minutes
         duration = data["trip"]["summary"]["time"] / 60
+        distance = data["trip"]["summary"]["length"]
         return {
             "route_points": route_points,
-            "duration": duration
+            "duration": duration,
+            "distance": distance
         }
     except KeyError:
         raise RuntimeError("Falha ao analisar os dados do Valhalla.")
    
-def get_route_map(start_latlng, end_latlng):
+def get_route_map(start_latlng, end_latlng, mode="auto"):
     try:
-        destomation_info = {}
-        destomation_info["start"] = start_latlng
-        destomation_info["end"] = end_latlng
-        
-        osrm_json = get_osrm_route_json(start_latlng, end_latlng)
+        destination_info = {}
+        destination_info["start"] = start_latlng
+        destination_info["end"] = end_latlng
+        if mode not in ["auto", "bicycle", "pedestrian"]:
+            return("Modo de transporte inválido. Use 'auto', 'bicycle' ou 'pedestrian'.")
+        if mode != "auto":
+            raise ValueError("Mode only available in valhalla, using the fallback provider")
+        osrm_json = get_osrm_route_json(start_latlng, end_latlng, mode)
         route_data = get_osrm_route_data(osrm_json)
-        destomation_info["route_provider"] = "OSRM"
-        destomation_info["tempo_de_viagem"] = route_data["duration"]
-        return get_map(route_data, start_latlng, end_latlng, destomation_info)
+        destination_info["route_provider"] = "OSRM"
+        destination_info["trip_time"] = route_data["duration"]
+        destination_info["distance"] = route_data["distance"] 
+        map = get_map(route_data, start_latlng, end_latlng, destination_info)
+        return map
     except Exception as exc:
         print(f" OSRM falhou: {exc}. Tentando Valhalla como fallback.")   
-        valhalla_json = get_valhalla_route_json(start_latlng, end_latlng)
-        route_data = get_valhalla_route_data(valhalla_json)
-        destomation_info["route_provider"] = "Valhalla"
-        destomation_info["tempo_de_viagem"] = route_data["duration"]
-        return get_map(route_data, start_latlng, end_latlng, destomation_info)
+        try:
+            valhalla_json = get_valhalla_route_json(start_latlng, end_latlng, mode)
+            route_data = get_valhalla_route_data(valhalla_json)
+            destination_info["route_provider"] = "Valhalla"
+            destination_info["trip_time"] = route_data["duration"]
+            destination_info["distance"] = route_data["distance"]
+            map = get_map(route_data, start_latlng, end_latlng, destination_info)
+            return map
+        except Exception as fallback_exc:
+            error_html = get_error_html(f"Valhalla: {fallback_exc} \n\nOSRM: {exc}", start_latlng, end_latlng)
+            return error_html
 
 if __name__ == "__main__":
     
     
     start_latlng = (-3.761389, -40.344722) 
     end_latlng = (-3.731862, -38.526669)  
-    #start_coords, end_coords = get_coordinates("SÂO PAULO, SP, BRASIL", "RIO DE JANEIRO, RJ, BRASIL")
-    #start_latlng = start_coords
-    #end_latlng = end_coords
-    
-    
-    valhalla_json = get_valhalla_route_json(start_latlng, end_latlng)
-    route_map_data = get_valhalla_route_data(valhalla_json)
-    route_map = get_map(route_map_data, start_latlng, end_latlng)
-    route_map.save("valhalla_route_map.html")
-    osrm_json = get_osrm_route_json(start_latlng, end_latlng)
-    route_map_data = get_osrm_route_data(osrm_json)
-    route_map = get_map(route_map_data,start_latlng, end_latlng)
-    route_map.save("route_map.html")
+    get_map_data = get_route_map(start_latlng, end_latlng,"bicycle")
+    get_map_data.save("route_map.html")
     webbrowser.open("route_map.html")
