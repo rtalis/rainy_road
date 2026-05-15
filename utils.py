@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta, timezone
+
+
 def get_error_html(error_message, start_latlng=None, end_latlng=None):
     """Generate a compact, user-friendly HTML error page for mobile screens."""
     return f"""
@@ -104,3 +107,61 @@ def get_error_html(error_message, start_latlng=None, end_latlng=None):
     </body>
     </html>
     """
+    
+def generate_destination_popup(trip_info):
+    travel_time = trip_info.get("trip_time", "N/A")
+    trip_estimated_arrival = (datetime.now(timezone.utc) - timedelta(hours=3) + timedelta(minutes=travel_time)).strftime("%H:%M") if isinstance(travel_time, (int, float)) else "N/A"
+    provider = trip_info.get("route_provider", "N/A")
+    distance = int(trip_info.get("distance", "N/A"))
+    if isinstance(travel_time, (int, float)):
+        dest_popup_html = f"""
+                        <div style='width: 230px; font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
+                        <b>Destino</b><br>
+                        <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
+                        Hora de chegada estimada: <b>{trip_estimated_arrival}</b><br>
+                        Provedor de rota: <b>{provider}</b></br>
+                        Distancia estimada: <b>{distance} km</b><br>
+                        Geolocalizador: <b>{trip_info.get("geolocation", "N/A")}</b><br>
+                        </div>
+                        """
+        return dest_popup_html
+
+def generate_origin_popup(trip_info):
+    provider = trip_info.get("route_provider", "N/A")
+    distance = int(trip_info.get("distance", "N/A"))
+    time_now = datetime.now(timezone.utc) - timedelta(hours=3)
+    time_now = time_now.strftime("%H:%M")
+    return f"""
+                    <div style='width: 230px; font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
+                    <b>Origem</b><br>
+                    <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
+                    Hora de partida: <b>{time_now}</b><br>
+                    Provedor de rota: <b>{provider}</b></br>
+                    Distancia estimada: <b>{distance} km</b><br> 
+                    Geolocalizador: <b>{trip_info.get("geolocation", "N/A")}</b><br>                   
+                    </div>
+                    """
+
+def generate_segment_popup(segment):
+    # Determine color based on how bad the storm is
+    
+    # Build the HTML Tooltip
+    tooltip_html = f"""
+    <div style='font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
+        <b>💭 Informações sobre este ponto</b><br>
+        <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
+        Chegada aprox: <b>{segment['time']}</b><br>
+        Volume: <b>{segment['volume']} mm/h</b><br>
+        Probabilidade: <b>{segment['prob']}%</b><br>
+        Provedor: <b>{segment['provider'] or 'N/A'}</b>
+    </div>
+    """
+    return tooltip_html
+    
+def get_rain_color(volume_mm):
+    """Returns a color hex code based on rain intensity."""
+    if volume_mm <= 0.2: return "#00c600"  # Green (Light or No Rain)
+    if volume_mm <= 0.5: return "#3388ff"  # Light Blue (Drizzle)
+    if volume_mm <= 1.5: return "#d8d84a"  # Yellow (Light Rain)
+    if volume_mm <= 3.0: return "#ff8800"  # Orange (Moderate Rain)
+    return "#cc0000"    # Deep Red (Heavy Rain / Danger)

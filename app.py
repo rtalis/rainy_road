@@ -104,7 +104,7 @@ def _update_progress(task, stage: str, detail: str = "") -> None:
 def _save_map_file(route_map) -> str:
     output_dir = Path(GENERATED_MAPS_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
-    cleanup_old_maps()
+    cleanup_old_maps()    
     file_path = output_dir / f"map_{uuid.uuid4().hex}.html"
     if isinstance(route_map, str):
         with open(file_path, "w", encoding="utf-8") as f:

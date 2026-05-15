@@ -9,7 +9,7 @@ import requests
 from dotenv import load_dotenv
 from geopy.extra.rate_limiter import RateLimiter
 from geopy.geocoders import Nominatim, Photon
-from utils import get_error_html
+from utils import generate_destination_popup, generate_segment_popup, get_error_html, generate_origin_popup, get_rain_color
 
 load_dotenv()
 OW_API_KEY = os.getenv("OW_API_KEY")
@@ -241,19 +241,13 @@ def get_open_meteo_batch_weather(lats, lons):
         return []
 
 
-def get_rain_color(volume_mm):
-    """Returns a color hex code based on rain intensity."""
-    if volume_mm <= 0.2: return "#00c600"  # Green (Light or No Rain)
-    if volume_mm <= 0.5: return "#3388ff"  # Light Blue (Drizzle)
-    if volume_mm <= 1.5: return "#d8d84a"  # Yellow (Light Rain)
-    if volume_mm <= 3.0: return "#ff8800"  # Orange (Moderate Rain)
-    return "#cc0000"    # Deep Red (Heavy Rain / Danger)
 
-def get_map(route_data, start_latlng, end_latlng, destination_info=None):
+
+def get_map(route_data, start_latlng, end_latlng, trip_info=None):
     """
     Generates a Folium map with weather data along the route.
     Expects route_data dictionary with 'route_points' and 'duration'.
-    destination_info is an optional dict with route metadata.
+    trip_info is an optional dict with route metadata.
     """
     # Extract standardized data
     route_points = route_data["route_points"]
@@ -318,20 +312,9 @@ def get_map(route_data, start_latlng, end_latlng, destination_info=None):
     route_map = folium.Map(location=[mid_lat, mid_lon], zoom_start=9, tiles="CartoDB positron")
     
     for segment in segment_data:
-        # Determine color based on how bad the storm is
-        segment_color = get_rain_color(segment["volume"])
-        
-        # Build the HTML Tooltip
-        tooltip_html = f"""
-        <div style='font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
-            <b>💭 Informações sobre este ponto</b><br>
-            <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
-            Chegada aprox: <b>{segment['time']}</b><br>
-            Volume: <b>{segment['volume']} mm/h</b><br>
-            Probabilidade: <b>{segment['prob']}%</b><br>
-            Provedor: <b>{segment['provider'] or 'N/A'}</b>
-        </div>
-        """
+        volume_mm = segment["volume"]
+        segment_color = get_rain_color(volume_mm)
+        segment_popup = generate_segment_popup(segment)
         
         # Invisible thicker line underneath for better clickability
         folium.PolyLine(
@@ -339,7 +322,7 @@ def get_map(route_data, start_latlng, end_latlng, destination_info=None):
             color=segment_color, 
             weight=20,  
             opacity=0, 
-            tooltip=folium.Tooltip(tooltip_html)
+            tooltip=folium.Tooltip(segment_popup)
         ).add_to(route_map)
         
         # Visible line on top
@@ -348,28 +331,19 @@ def get_map(route_data, start_latlng, end_latlng, destination_info=None):
             color=segment_color, 
             weight=7, 
             opacity=1,
-            tooltip=folium.Tooltip(tooltip_html)
+            tooltip=folium.Tooltip(segment_popup)
         ).add_to(route_map)
+    
+    origin_popup_html = "Origem"
+    if trip_info:
+        origin_popup_html = generate_origin_popup(trip_info)
 
-    folium.Marker([start_latlng[0], start_latlng[1]], popup="Inicio").add_to(route_map)
+    folium.Marker([start_latlng[0], start_latlng[1]], popup=origin_popup_html).add_to(route_map)
     
     # Build destination popup with route info
     dest_popup_html = "Destino"
-    if destination_info:
-        travel_time = destination_info.get("trip_time", "N/A")
-        trip_estimated_arrival = (datetime.now() + timedelta(minutes=travel_time)).strftime("%H:%M") if isinstance(travel_time, (int, float)) else "N/A"
-        provider = destination_info.get("route_provider", "N/A")
-        distance = int(destination_info.get("distance", "N/A"))
-        if isinstance(travel_time, (int, float)):
-            dest_popup_html = f"""
-                            <div style='width: 230px; font-family: Arial, sans-serif; font-size: 13px; padding: 4px;'>
-                            <b>Destino</b><br>
-                            <hr style='margin: 4px 0; border: 0; border-top: 1px solid #ccc;'>
-                            Hora de chegada estimada: <b>{trip_estimated_arrival}</b><br>
-                            Provedor de rota: <b>{provider}</b></br>
-                            Distancia estimada: <b>{distance} km</b><br>
-                            </div>
-                            """
+    if trip_info:
+        dest_popup_html = generate_destination_popup(trip_info)
     
     folium.Marker([end_latlng[0], end_latlng[1]], popup=dest_popup_html).add_to(route_map)
     
@@ -480,29 +454,30 @@ def get_valhalla_route_data(data):
    
 def get_route_map(start_latlng, end_latlng, mode="auto"):
     try:
-        destination_info = {}
-        destination_info["start"] = start_latlng
-        destination_info["end"] = end_latlng
+        trip_info = {}
+        trip_info["start"] = start_latlng
+        trip_info["end"] = end_latlng
+        trip_info["geolocation"] = "Photon" if PHOTON_ENABLED else "Nominatim"
         if mode not in ["auto", "bicycle", "pedestrian"]:
             return("Modo de transporte inválido. Use 'auto', 'bicycle' ou 'pedestrian'.")
         if mode != "auto":
             raise ValueError("Mode only available in valhalla, using the fallback provider")
         osrm_json = get_osrm_route_json(start_latlng, end_latlng)
         route_data = get_osrm_route_data(osrm_json)
-        destination_info["route_provider"] = "OSRM"
-        destination_info["trip_time"] = route_data["duration"]
-        destination_info["distance"] = route_data["distance"] 
-        map = get_map(route_data, start_latlng, end_latlng, destination_info)
+        trip_info["route_provider"] = "OSRM"
+        trip_info["trip_time"] = route_data["duration"]
+        trip_info["distance"] = route_data["distance"] 
+        map = get_map(route_data, start_latlng, end_latlng, trip_info)
         return map
     except Exception as exc:
         print(f" OSRM falhou: {exc}. Tentando Valhalla como fallback.")   
         try:
             valhalla_json = get_valhalla_route_json(start_latlng, end_latlng, mode)
             route_data = get_valhalla_route_data(valhalla_json)
-            destination_info["route_provider"] = "Valhalla"
-            destination_info["trip_time"] = route_data["duration"]
-            destination_info["distance"] = route_data["distance"]
-            map = get_map(route_data, start_latlng, end_latlng, destination_info)
+            trip_info["route_provider"] = "Valhalla"
+            trip_info["trip_time"] = route_data["duration"]
+            trip_info["distance"] = route_data["distance"]
+            map = get_map(route_data, start_latlng, end_latlng, trip_info)
             return map
         except Exception as fallback_exc:
             error_html = get_error_html(f"Valhalla: {fallback_exc} \n\nOSRM: {exc}", start_latlng, end_latlng)
@@ -513,6 +488,10 @@ if __name__ == "__main__":
     
     start_latlng = (-3.761389, -40.344722) 
     end_latlng = (-3.731862, -38.526669)  
-    get_map_data = get_route_map(start_latlng, end_latlng,"bicycle")
-    get_map_data.save("route_map.html")
+    get_map_data = get_route_map(start_latlng, end_latlng,"auto")
+    if isinstance(get_map_data, str):
+        with open("route_map.html", "w", encoding="utf-8") as f:
+            f.write(get_map_data)
+    else:      
+        get_map_data.save("route_map.html")
     webbrowser.open("route_map.html")
