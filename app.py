@@ -120,7 +120,7 @@ def create_map(start_location: str, end_location: str, travel_mode: str = "auto"
     _update_progress(task, "coordinates", "Buscando coordenadas das cidades")
     start_latlng, end_latlng = get_coordinates(start_location, end_location)
     travel_mode = travel_mode
-
+ 
     _update_progress(task, "route", "Gerando rota com OSRM")
     _update_progress(task, "map", "Renderizando mapa com dados de chuva")
     route_map = get_route_map(start_latlng, end_latlng, travel_mode)

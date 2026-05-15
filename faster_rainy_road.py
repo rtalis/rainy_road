@@ -487,7 +487,7 @@ def get_route_map(start_latlng, end_latlng, mode="auto"):
             return("Modo de transporte inválido. Use 'auto', 'bicycle' ou 'pedestrian'.")
         if mode != "auto":
             raise ValueError("Mode only available in valhalla, using the fallback provider")
-        osrm_json = get_osrm_route_json(start_latlng, end_latlng, mode)
+        osrm_json = get_osrm_route_json(start_latlng, end_latlng)
         route_data = get_osrm_route_data(osrm_json)
         destination_info["route_provider"] = "OSRM"
         destination_info["trip_time"] = route_data["duration"]
