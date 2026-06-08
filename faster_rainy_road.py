@@ -338,22 +338,48 @@ def get_map(route_data, start_latlng, end_latlng, trip_info=None):
     if trip_info:
         origin_popup_html = generate_origin_popup(trip_info)
 
-    folium.Marker([start_latlng[0], start_latlng[1]], popup=origin_popup_html).add_to(route_map)
+    folium.CircleMarker(
+        [start_latlng[0], start_latlng[1]], 
+        radius=5, 
+        color='blue', 
+        fill=True, 
+        fill_color='blue', 
+        fill_opacity=1,
+        popup=origin_popup_html
+    ).add_to(route_map)
     
     # Build destination popup with route info
     dest_popup_html = "Destino"
     if trip_info:
         dest_popup_html = generate_destination_popup(trip_info)
     
-    folium.Marker([end_latlng[0], end_latlng[1]], popup=dest_popup_html).add_to(route_map)
+    folium.CircleMarker(
+        [end_latlng[0], end_latlng[1]], 
+        radius=5, 
+        color='red', 
+        fill=True, 
+        fill_color='red', 
+        fill_opacity=1,
+        popup=dest_popup_html
+    ).add_to(route_map)
     
-    # Auto-zoom to fit all route points
+    # Auto-zoom to fit all route points (with flyToBounds animation)
     if route_points:
         min_lat = min(p[0] for p in route_points)
         max_lat = max(p[0] for p in route_points)
         min_lon = min(p[1] for p in route_points)
         max_lon = max(p[1] for p in route_points)
-        route_map.fit_bounds([(min_lat, min_lon), (max_lat, max_lon)])
+        
+        # Start with a full zoom out
+        route_map.options['zoom'] = 2
+        
+        bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+        js = f"""
+            setTimeout(function() {{
+                {route_map.get_name()}.flyToBounds({bounds}, {{duration: 3.0}});
+            }}, 1000);
+        """
+        route_map.get_root().html.add_child(folium.Element(f"<script>{js}</script>"))
     
     return route_map
 

@@ -344,7 +344,7 @@
         <div class="view active" id="formView">
           <div class="input-group">
             <span class="material-symbols-outlined">location_on</span>
-            <input type="text" id="startLocation" placeholder="Cidade de partida" value="Sobral, CE">
+            <input type="text" id="startLocation" placeholder="Cidade de partida" value="Sobral, CE" onfocus="resetLayoutAndMap()">
             <button class="swap-btn" onclick="swapCities()" title="Inverter rotas">
               <span class="material-symbols-outlined" id="swapIcon">swap_vert</span>
             </button>
@@ -352,7 +352,7 @@
 
           <div class="input-group">
             <span class="material-symbols-outlined">flag</span>
-            <input type="text" id="endLocation" placeholder="Cidade de destino" value="Fortaleza, CE">
+            <input type="text" id="endLocation" placeholder="Cidade de destino" value="Fortaleza, CE" onfocus="resetLayoutAndMap()">
           </div>
 
           <div class="action-row">
@@ -422,8 +422,8 @@
       swapRotation += 180;
       swapIcon.style.transform = `rotate(${swapRotation}deg)`;
 
-      // Reset layout if request was done
-      resetLayout();
+      // Reset layout and map if request was done
+      resetLayoutAndMap();
     }
 
     function updateTransportIcon() {
@@ -434,7 +434,17 @@
       else if (mode === 'pedestrian') icon.innerText = 'directions_walk';
       else icon.innerText = 'directions_car';
       
+      resetLayoutAndMap();
+    }
+
+    const DEFAULT_MAP_SRC = "https://www.openstreetmap.org/export/embed.html?bbox=-74.0039%2C-33.8339%2C-34.7167%2C5.3535&amp;layer=mapnik";
+
+    function resetLayoutAndMap() {
       resetLayout();
+      const mapIframe = document.querySelector('#mapBg iframe');
+      if (mapIframe && !mapIframe.src.includes('openstreetmap.org')) {
+         mapIframe.src = DEFAULT_MAP_SRC;
+      }
     }
 
     function resetLayout() {
@@ -544,7 +554,10 @@
         if (response.ok) {
           const blob = await response.blob();
           const url = window.URL.createObjectURL(blob);
-          window.open(url, '_blank');
+          const mapIframe = document.querySelector('#mapBg iframe');
+          if (mapIframe) {
+            mapIframe.src = url;
+          }
           completeRequest();
         } else {
           showSnackbar('Erro ao recuperar mapa gerado', 'error');
