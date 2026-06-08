@@ -1,413 +1,583 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rainy Road API</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rainy Road</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+
+  <style>
+    :root {
+      --primary: #60a5fa;
+      --text: #ffffff;
+      --text-muted: #cbd5e1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      overflow: hidden; /* Prevent scrolling, act like an app */
+      background-color: #0f172a;
+    }
+
+    /* Map Background */
+    .map-background {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      filter: brightness(0.6) saturate(1.2); /* Darken map so glass stands out */
+      pointer-events: none; /* Let clicks pass through initially */
+      transition: filter 0.6s ease;
+    }
+
+    .map-background iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Container for the animated glass box */
+    .app-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      pointer-events: none; /* Let user interact with map when box is at bottom */
+    }
+
+    /* The Frosted Glass Box */
+    .frosted-glass {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      border-radius: 30px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      width: 350px;
+      height: 240px; /* Slight height adjust to fit all elements cleanly */
+      padding: 24px;
+      pointer-events: auto; /* Re-enable clicks inside the box */
+      
+      /* Animation properties matching Flutter's AnimatedAlign/AnimatedContainer */
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+    }
+
+    /* State when request is done (moves to bottom, gets wider) */
+    .frosted-glass.request-done {
+      top: calc(100% - 20px);
+      transform: translateY(-100%);
+      width: 400px;
+    }
+
+    @media (max-width: 450px) {
+      .frosted-glass.request-done {
+        width: calc(100% - 40px);
       }
+    }
 
-      body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-          Roboto, sans-serif;
-        background: #0f172a;
-        min-height: 100vh;
-        color: #e2e8f0;
-        line-height: 1.6;
-      }
+    /* View Switcher Container */
+    .view-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
 
-      .hero {
-        background: linear-gradient(
-            135deg,
-            rgba(30, 58, 95, 0.75) 0%,
-            rgba(15, 23, 42, 0.75) 100%
-          ),
-          url("/static/images/hero-bg.png") center/cover no-repeat;
-        background-attachment: fixed;
-        padding: 80px 20px;
-        position: relative;
-        min-height: 500px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .hero::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234a5568' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-      }
+    .view {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.95);
+    }
 
-      .hero-content {
-        position: relative;
-        z-index: 1;
-        max-width: 800px;
-        margin: 0 auto;
-        text-align: center;
-      }
+    .view.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+    }
 
-      .logo {
-        font-size: 4rem;
-        margin-bottom: 20px;
-        filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
-      }
+    /* Form Elements */
+    .input-group {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      padding: 4px 12px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
 
-      h1 {
-        font-size: 3rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 16px;
-      }
+    .input-group .material-symbols-outlined {
+      color: var(--text-muted);
+      font-size: 20px;
+      margin-right: 8px;
+    }
 
-      .tagline {
-        font-size: 1.25rem;
-        color: #94a3b8;
-        max-width: 500px;
-        margin: 0 auto 30px;
-      }
+    .input-group input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      width: 100%;
+      padding: 10px 0;
+      outline: none;
+    }
 
-      .badges {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
+    .input-group input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
 
-      .badge {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 8px 16px;
-        border-radius: 50px;
-        font-size: 0.875rem;
-        color: #cbd5e1;
-        backdrop-filter: blur(10px);
-      }
+    .swap-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s, transform 0.4s;
+    }
 
-      .container {
-        max-width: 1000px;
-        margin: 0 auto;
-        padding: 60px 20px;
-      }
+    .swap-btn:hover {
+      color: var(--primary);
+    }
 
-      .section-title {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #f1f5f9;
-        margin-bottom: 24px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
+    /* Action Row */
+    .action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      gap: 12px;
+    }
 
-      .section-title::before {
-        content: "";
-        width: 4px;
-        height: 24px;
-        background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-        border-radius: 2px;
-      }
+    .select-wrapper {
+      position: relative;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
 
-      .endpoints-grid {
-        display: grid;
-        gap: 16px;
-      }
+    .select-wrapper select {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
 
-      .endpoint-card {
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 24px;
-        transition: all 0.2s ease;
-      }
+    .btn-primary {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      font-size: 14px;
+      padding: 10px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
 
-      .endpoint-card:hover {
-        border-color: #4f46e5;
-        transform: translateY(-2px);
-        box-shadow: 0 10px 40px rgba(79, 70, 229, 0.1);
-      }
+    .btn-primary:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
 
-      .endpoint-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
 
-      .method {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-      }
+    .icon-btn:hover {
+      color: var(--text);
+    }
 
-      .endpoint-path {
-        font-family: "SF Mono", "Fira Code", monospace;
-        font-size: 1rem;
-        color: #f1f5f9;
-        background: #0f172a;
-        padding: 6px 12px;
-        border-radius: 6px;
-      }
+    /* Loading State */
+    .loading-view {
+      text-align: center;
+    }
 
-      .endpoint-description {
-        color: #94a3b8;
-        font-size: 0.9rem;
-      }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top-color: var(--primary);
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
 
-      .endpoint-params {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid #334155;
-      }
+    .loading-stage {
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
 
-      .param-label {
-        font-size: 0.75rem;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 6px;
-      }
+    .loading-percent {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
 
-      .param-code {
-        font-family: "SF Mono", "Fira Code", monospace;
-        font-size: 0.85rem;
-        color: #a78bfa;
-        background: #0f172a;
-        padding: 2px 8px;
-        border-radius: 4px;
-      }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
 
-      .example-section {
-        margin-top: 60px;
-      }
+    /* Top AppBar simulation */
+    .app-bar {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to bottom, rgba(15, 23, 42, 0.8), transparent);
+      z-index: 20;
+      pointer-events: auto;
+    }
 
-      .example-box {
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        overflow: hidden;
-      }
+    .app-title {
+      font-weight: 600;
+      font-size: 18px;
+    }
 
-      .example-header {
-        background: #0f172a;
-        padding: 12px 20px;
-        border-bottom: 1px solid #334155;
-        font-size: 0.875rem;
-        color: #64748b;
-      }
+    /* Snackbar Notification */
+    .snackbar {
+      position: absolute;
+      bottom: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #4ade80; /* Light green default */
+      color: #064e3b;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 14px;
+      z-index: 30;
+      transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      white-space: nowrap;
+    }
 
-      .example-code {
-        padding: 20px;
-        font-family: "SF Mono", "Fira Code", monospace;
-        font-size: 0.875rem;
-        color: #e2e8f0;
-        overflow-x: auto;
-      }
+    .snackbar.show {
+      bottom: 24px;
+    }
+    
+    .snackbar.warning {
+      background: #fbbf24;
+      color: #78350f;
+    }
+    
+    .snackbar.error {
+      background: #f87171;
+      color: #450a0a;
+    }
+  </style>
+</head>
+<body>
 
-      .example-code .comment {
-        color: #64748b;
-      }
+  <div class="app-bar">
+    <div class="app-title">Rainy Road App</div>
+    <button class="icon-btn">
+      <span class="material-symbols-outlined">more_vert</span>
+    </button>
+  </div>
 
-      .example-code .url {
-        color: #60a5fa;
-      }
+  <div class="map-background" id="mapBg">
+    <iframe src="https://www.openstreetmap.org/export/embed.html?bbox=-74.0039%2C-33.8339%2C-34.7167%2C5.3535&amp;layer=mapnik" scrolling="no"></iframe>
+  </div>
 
-      .footer {
-        border-top: 1px solid #1e293b;
-        padding: 40px 20px;
-        text-align: center;
-      }
-
-      .footer-links {
-        display: flex;
-        gap: 24px;
-        justify-content: center;
-        margin-bottom: 20px;
-      }
-
-      .footer-link {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: #94a3b8;
-        text-decoration: none;
-        font-size: 0.9rem;
-        transition: color 0.2s ease;
-      }
-
-      .footer-link:hover {
-        color: #60a5fa;
-      }
-
-      .footer-link svg {
-        width: 20px;
-        height: 20px;
-      }
-
-      .copyright {
-        color: #475569;
-        font-size: 0.8rem;
-      }
-
-      @media (max-width: 640px) {
-        h1 {
-          font-size: 2rem;
-        }
-
-        .tagline {
-          font-size: 1rem;
-        }
-
-        .endpoint-header {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <section class="hero">
-      <div class="hero-content">
-        <div class="logo"></div>
-        <h1>Rainy Road API</h1>
-        <p class="tagline">
-          Verify weather conditions along your travel route with ease.
-        </p>
-        <div class="badges">
-          <span class="badge">🐍 Python</span>
-          <span class="badge">🗺️ OpenStreetMap</span>
-          <span class="badge">🌤️ OpenWeather</span>
-          <span class="badge">⚡ Async</span>
-        </div>
-      </div>
-    </section>
-
-    <div class="container">
-      <h2 class="section-title">API Endpoints</h2>
-
-      <div class="endpoints-grid">
-        <div class="endpoint-card">
-          <div class="endpoint-header">
-            <span class="method">GET</span>
-            <code class="endpoint-path">/generate_map_v2</code>
+  <div class="app-container">
+    <div class="frosted-glass" id="glassBox">
+      
+      <div class="view-container">
+        
+        <div class="view active" id="formView">
+          <div class="input-group">
+            <span class="material-symbols-outlined">location_on</span>
+            <input type="text" id="startLocation" placeholder="Cidade de partida" value="Sobral, CE">
+            <button class="swap-btn" onclick="swapCities()" title="Inverter rotas">
+              <span class="material-symbols-outlined" id="swapIcon">swap_vert</span>
+            </button>
           </div>
-          <p class="endpoint-description">
-            Initiates asynchronous generation of the route map with weather
-            information. Returns a task ID for tracking.
-          </p>
-          <div class="endpoint-params">
-            <div class="param-label">Parameters</div>
-            <code class="param-code">start_location</code> ·
-            <code class="param-code">end_location</code>
+
+          <div class="input-group">
+            <span class="material-symbols-outlined">flag</span>
+            <input type="text" id="endLocation" placeholder="Cidade de destino" value="Fortaleza, CE">
+          </div>
+
+          <div class="action-row">
+            <div class="select-wrapper">
+              <span class="material-symbols-outlined" id="transportIcon">directions_car</span>
+              <select id="travelMode" onchange="updateTransportIcon()">
+                <option value="auto">Carro/Moto</option>
+                <option value="bicycle">Bicicleta</option>
+                <option value="pedestrian">A pé</option>
+              </select>
+            </div>
+
+            <button class="btn-primary" onclick="verifyRoute()">
+              <span class="material-symbols-outlined" style="font-size: 18px;">thunderstorm</span>
+              Verificar rota
+            </button>
+
+            <button class="icon-btn">
+              <span class="material-symbols-outlined">settings</span>
+            </button>
           </div>
         </div>
 
-        <div class="endpoint-card">
-          <div class="endpoint-header">
-            <span class="method">GET</span>
-            <code class="endpoint-path">/progress/{task_id}</code>
-          </div>
-          <p class="endpoint-description">
-            Returns the current progress of the map generation, including stage
-            and completion percentage.
-          </p>
+        <div class="view loading-view" id="loadingView">
+          <div class="spinner"></div>
+          <div class="loading-stage" id="loadingStage">Preparando requisição</div>
+          <div class="loading-percent" id="loadingPercent"></div>
         </div>
 
-        <div class="endpoint-card">
-          <div class="endpoint-header">
-            <span class="method">GET</span>
-            <code class="endpoint-path">/result/{task_id}</code>
-          </div>
-          <p class="endpoint-description">
-            Retrieves the generated route map HTML file when the task is
-            complete.
-          </p>
-        </div>
-
-        <div class="endpoint-card">
-          <div class="endpoint-header">
-            <span class="method">GET</span>
-            <code class="endpoint-path">/generate_map</code>
-          </div>
-          <p class="endpoint-description">
-            Synchronous map generation (legacy endpoint). Waits for completion
-            and returns the map directly (Ideal for quick tests).
-          </p>
-          <div class="endpoint-params">
-            <div class="param-label">Parameters</div>
-            <code class="param-code">start_location</code> ·
-            <code class="param-code">end_location</code>
-          </div>
-        </div>
-      </div>
-
-      <div class="example-section">
-        <h2 class="section-title">Example Usage</h2>
-        <div class="example-box">
-          <div class="example-header">Terminal</div>
-          <pre
-            class="example-code"
-          ><span class="comment"># Start map generation</span>
-curl "http://localhost:8000/generate_map_v2?start_location=São Paulo,SP&end_location=Rio de Janeiro,RJ"
-<span class="comment"># Response: {"task_id": "abc123..."}</span>
-
-<span class="comment"># Check progress</span>
-curl "http://localhost:8000/progress/abc123..."
-<span class="comment"># Response: {"state": "PROGRESS", "stage": "route", "percent": 75}</span>
-
-<span class="comment"># Get result</span>
-curl "http://localhost:8000/result/abc123..." -o map.html</pre>
-        </div>
       </div>
     </div>
+  </div>
 
-    <footer class="footer">
-      <div class="footer-links">
-        <a
-          href="https://github.com/rtalis/rainy_road"
-          target="_blank"
-          class="footer-link"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
-            />
-          </svg>
-          GitHub
-        </a>
-        <a
-          href="https://github.com/rtalis/rainy-road-app"
-          target="_blank"
-          class="footer-link"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M17.523 2H6.477C5.109 2 4 3.109 4 4.477v15.046C4 20.891 5.109 22 6.477 22h11.046C18.891 22 20 20.891 20 19.523V4.477C20 3.109 18.891 2 17.523 2zM12 18.5c-.828 0-1.5-.672-1.5-1.5s.672-1.5 1.5-1.5 1.5.672 1.5 1.5-.672 1.5-1.5 1.5zm4-5H8V5h8v8.5z"
-            />
-          </svg>
-          Mobile App
-        </a>
-      </div>
-      <p class="copyright">© 2025 Roxel.dev - Criado por Ronaldo Talison.</p>
-    </footer>
-  </body>
+  <div class="snackbar" id="snackbar"></div>
+
+  <script>
+    // State Variables
+    let isRequestDone = false;
+    let swapRotation = 0;
+    let progressInterval = null;
+    let currentTaskId = null;
+
+    const stageLabels = {
+      'coordinates': 'Buscando coordenadas',
+      'memory_check': 'Verificando memória',
+      'graph_primary': 'Gerando rota principal',
+      'graph_secondary': 'Gerando rota completa',
+      'graph_full': 'Otimizando rota',
+      'graph_radius': 'Calculando raio',
+      'route': 'Calculando melhor caminho',
+      'map': 'Renderizando mapa',
+      'saving': 'Salvando resultado',
+      'complete': 'Mapa pronto',
+      'failed': 'Erro no processamento'
+    };
+
+    function swapCities() {
+      const start = document.getElementById('startLocation');
+      const end = document.getElementById('endLocation');
+      const swapIcon = document.getElementById('swapIcon');
+      
+      const temp = start.value;
+      start.value = end.value;
+      end.value = temp;
+
+      // Animate icon
+      swapRotation += 180;
+      swapIcon.style.transform = `rotate(${swapRotation}deg)`;
+
+      // Reset layout if request was done
+      resetLayout();
+    }
+
+    function updateTransportIcon() {
+      const mode = document.getElementById('travelMode').value;
+      const icon = document.getElementById('transportIcon');
+      
+      if (mode === 'bicycle') icon.innerText = 'directions_bike';
+      else if (mode === 'pedestrian') icon.innerText = 'directions_walk';
+      else icon.innerText = 'directions_car';
+      
+      resetLayout();
+    }
+
+    function resetLayout() {
+      if (isRequestDone) {
+        isRequestDone = false;
+        document.getElementById('glassBox').classList.remove('request-done');
+        document.getElementById('mapBg').style.filter = 'brightness(0.6) saturate(1.2)';
+        document.getElementById('mapBg').style.pointerEvents = 'none';
+      }
+    }
+
+    function showSnackbar(message, type = 'success') {
+      const snackbar = document.getElementById('snackbar');
+      snackbar.innerText = message;
+      snackbar.className = `snackbar show ${type}`;
+      
+      setTimeout(() => {
+        snackbar.classList.remove('show');
+      }, 3000);
+    }
+
+    function verifyRoute() {
+      const start = document.getElementById('startLocation').value.trim();
+      const end = document.getElementById('endLocation').value.trim();
+      const travelMode = document.getElementById('travelMode').value;
+
+      if (!start || !end) {
+        showSnackbar('Informe cidades válidas para iniciar a rota', 'error');
+        return;
+      }
+
+      if (start.toLowerCase() === end.toLowerCase()) {
+        showSnackbar('Digite o nome de cidades diferentes', 'error');
+        return;
+      }
+
+      // Switch to loading view
+      document.getElementById('formView').classList.remove('active');
+      document.getElementById('loadingView').classList.add('active');
+
+      // Call the real API endpoint
+      initiateMapGeneration(start, end, travelMode);
+    }
+
+    async function initiateMapGeneration(start, end, travelMode) {
+      try {
+        const params = new URLSearchParams({
+          start_location: start,
+          end_location: end,
+          travel_mode: travelMode
+        });
+
+        const response = await fetch(`/generate_map_v2?${params}`);
+        const data = await response.json();
+
+        if (data.task_id) {
+          currentTaskId = data.task_id;
+          pollProgress();
+        } else {
+          showSnackbar('Erro ao iniciar geração do mapa', 'error');
+          resetToForm();
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showSnackbar('Erro de conexão: ' + error.message, 'error');
+        resetToForm();
+      }
+    }
+
+    function pollProgress() {
+      const stageEl = document.getElementById('loadingStage');
+      const percentEl = document.getElementById('loadingPercent');
+
+      progressInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/progress/${currentTaskId}`);
+          const data = await response.json();
+
+          const stageLabel = stageLabels[data.stage] || data.stage || 'Processando...';
+          const percent = data.percent || 0;
+          const detail = data.detail || '';
+
+          stageEl.innerText = stageLabel;
+          percentEl.innerText = `${percent}% concluído`;
+
+          // If task is complete, fetch the result
+          if (data.state === 'SUCCESS') {
+            clearInterval(progressInterval);
+            setTimeout(() => fetchMapResult(), 500);
+          } else if (data.state === 'FAILURE') {
+            clearInterval(progressInterval);
+            showSnackbar('Erro ao gerar mapa: ' + detail, 'error');
+            resetToForm();
+          }
+        } catch (error) {
+          console.error('Error polling progress:', error);
+          clearInterval(progressInterval);
+          showSnackbar('Erro ao verificar progresso', 'error');
+          resetToForm();
+        }
+      }, 500); // Poll every 500ms
+    }
+
+    async function fetchMapResult() {
+      try {
+        const response = await fetch(`/result/${currentTaskId}`);
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          completeRequest();
+        } else {
+          showSnackbar('Erro ao recuperar mapa gerado', 'error');
+          resetToForm();
+        }
+      } catch (error) {
+        console.error('Error fetching result:', error);
+        showSnackbar('Erro ao carregar resultado', 'error');
+        resetToForm();
+      }
+    }
+
+    function resetToForm() {
+      document.getElementById('loadingView').classList.remove('active');
+      document.getElementById('formView').classList.add('active');
+      currentTaskId = null;
+    }
+
+    function completeRequest() {
+      // Revert to form view
+      document.getElementById('loadingView').classList.remove('active');
+      document.getElementById('formView').classList.add('active');
+
+      // Animate box to the bottom (Alignment.bottomCenter in Flutter)
+      isRequestDone = true;
+      document.getElementById('glassBox').classList.add('request-done');
+      
+      // Make map look interactive
+      document.getElementById('mapBg').style.filter = 'brightness(1) saturate(1)';
+      document.getElementById('mapBg').style.pointerEvents = 'auto';
+
+      showSnackbar('Mapa gerado com sucesso!', 'success');
+    }
+  </script>
+</body>
 </html>

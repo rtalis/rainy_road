@@ -176,6 +176,11 @@ def index():
     return send_file("static/index.html", mimetype="text/html")
 
 
+@app.route("/api", methods=["GET"])
+def api_docs():
+    return send_file("static/api.html", mimetype="text/html")
+
+
 @app.route("/generate_map", methods=["GET"])
 def generate_map_legacy():
     start_location = _sanitize_location(request.args.get("start_location"))
@@ -292,4 +297,4 @@ def get_task_result(task_id: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8000)
+    app.run(debug=True, host="0.0.0.0", port=8009)
