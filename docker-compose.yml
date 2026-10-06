@@ -24,6 +24,8 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES:-7200}
+      - CARTO_API_KEY=${CARTO_API_KEY}
+      - CARTO_STYLE=${CARTO_STYLE:-voyager}
     volumes:
       - ./generated_maps:/app/generated_maps
       - ./cache:/app/cache
@@ -46,6 +48,8 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES:-7200}
+      - CARTO_API_KEY=${CARTO_API_KEY}
+      - CARTO_STYLE=${CARTO_STYLE:-voyager}
     volumes:
       - ./generated_maps:/app/generated_maps
       - ./cache:/app/cache

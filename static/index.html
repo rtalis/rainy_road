@@ -91,6 +91,12 @@
       top: calc(100% - 20px);
       transform: translateY(-100%);
       width: 400px;
+      cursor: pointer;
+    }
+
+    .frosted-glass.request-done:hover {
+      border-color: rgba(96, 165, 250, 0.4);
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
     }
 
     @media (max-width: 450px) {
@@ -336,7 +342,7 @@
     <iframe src="https://www.openstreetmap.org/export/embed.html?bbox=-74.0039%2C-33.8339%2C-34.7167%2C5.3535&amp;layer=mapnik" scrolling="no"></iframe>
   </div>
 
-  <div class="app-container">
+  <div class="app-container" id="appContainer">
     <div class="frosted-glass" id="glassBox">
       
       <div class="view-container">
@@ -344,7 +350,7 @@
         <div class="view active" id="formView">
           <div class="input-group">
             <span class="material-symbols-outlined">location_on</span>
-            <input type="text" id="startLocation" placeholder="Cidade de partida" value="Sobral, CE" onfocus="resetLayoutAndMap()">
+            <input type="text" id="startLocation" placeholder="Cidade de partida" value="Sobral, CE" onfocus="moveGlassBoxUp()">
             <button class="swap-btn" onclick="swapCities()" title="Inverter rotas">
               <span class="material-symbols-outlined" id="swapIcon">swap_vert</span>
             </button>
@@ -352,7 +358,7 @@
 
           <div class="input-group">
             <span class="material-symbols-outlined">flag</span>
-            <input type="text" id="endLocation" placeholder="Cidade de destino" value="Fortaleza, CE" onfocus="resetLayoutAndMap()">
+            <input type="text" id="endLocation" placeholder="Cidade de destino" value="Fortaleza, CE" onfocus="moveGlassBoxUp()">
           </div>
 
           <div class="action-row">
@@ -370,8 +376,8 @@
               Verificar rota
             </button>
 
-            <button class="icon-btn">
-              <span class="material-symbols-outlined">settings</span>
+            <button class="icon-btn" id="toggleMinimizeBtn" onclick="toggleGlassBoxPosition(event)" title="Alternar visualização do mapa">
+              <span class="material-symbols-outlined" id="toggleMinimizeIcon">map</span>
             </button>
           </div>
         </div>
@@ -389,11 +395,19 @@
   <div class="snackbar" id="snackbar"></div>
 
   <script>
+    // Configuration
+    const API_BASE = (window.location.origin.includes('rainyroad.roxel.dev') || (window.location.protocol === 'http:' && window.location.port === '8009'))
+      ? ''
+      : 'https://rainyroad.roxel.dev';
+
     // State Variables
     let isRequestDone = false;
+    let hasGeneratedMap = false;
     let swapRotation = 0;
     let progressInterval = null;
     let currentTaskId = null;
+    let pollAttempts = 0;
+    const MAX_POLL_ATTEMPTS = 60; // 60 attempts * 1.5s = 90s max
 
     const stageLabels = {
       'coordinates': 'Buscando coordenadas',
@@ -409,6 +423,13 @@
       'failed': 'Erro no processamento'
     };
 
+    function clearExistingProgressInterval() {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+    }
+
     function swapCities() {
       const start = document.getElementById('startLocation');
       const end = document.getElementById('endLocation');
@@ -422,8 +443,8 @@
       swapRotation += 180;
       swapIcon.style.transform = `rotate(${swapRotation}deg)`;
 
-      // Reset layout and map if request was done
-      resetLayoutAndMap();
+      // Move box back up if at bottom so user can see edit
+      moveGlassBoxUp();
     }
 
     function updateTransportIcon() {
@@ -434,27 +455,58 @@
       else if (mode === 'pedestrian') icon.innerText = 'directions_walk';
       else icon.innerText = 'directions_car';
       
-      resetLayoutAndMap();
+      moveGlassBoxUp();
     }
 
-    const DEFAULT_MAP_SRC = "https://www.openstreetmap.org/export/embed.html?bbox=-74.0039%2C-33.8339%2C-34.7167%2C5.3535&amp;layer=mapnik";
+    const DEFAULT_MAP_SRC = "https://www.openstreetmap.org/export/embed.html?bbox=-74.0039%2C-33.8339%2C-34.7167%2C5.3535&layer=mapnik";
 
-    function resetLayoutAndMap() {
-      resetLayout();
-      const mapIframe = document.querySelector('#mapBg iframe');
-      if (mapIframe && !mapIframe.src.includes('openstreetmap.org')) {
-         mapIframe.src = DEFAULT_MAP_SRC;
+    function moveGlassBoxUp() {
+      if (!isRequestDone) return;
+      isRequestDone = false;
+      const glassBox = document.getElementById('glassBox');
+      glassBox.classList.remove('request-done');
+      
+      const mapBg = document.getElementById('mapBg');
+      mapBg.style.filter = 'brightness(0.65) saturate(1.1)';
+      mapBg.style.pointerEvents = 'none';
+
+      const toggleIcon = document.getElementById('toggleMinimizeIcon');
+      if (toggleIcon) toggleIcon.innerText = 'map';
+    }
+
+    function moveGlassBoxDown() {
+      if (isRequestDone || !hasGeneratedMap) return;
+      isRequestDone = true;
+      const glassBox = document.getElementById('glassBox');
+      glassBox.classList.add('request-done');
+      
+      const mapBg = document.getElementById('mapBg');
+      mapBg.style.filter = 'brightness(1) saturate(1)';
+      mapBg.style.pointerEvents = 'auto';
+
+      const toggleIcon = document.getElementById('toggleMinimizeIcon');
+      if (toggleIcon) toggleIcon.innerText = 'edit_location_alt';
+    }
+
+    function toggleGlassBoxPosition(event) {
+      if (event) event.stopPropagation();
+      if (!hasGeneratedMap) {
+        showSnackbar('Gere uma rota primeiro para alternar o mapa', 'warning');
+        return;
       }
-    }
-
-    function resetLayout() {
       if (isRequestDone) {
-        isRequestDone = false;
-        document.getElementById('glassBox').classList.remove('request-done');
-        document.getElementById('mapBg').style.filter = 'brightness(0.6) saturate(1.2)';
-        document.getElementById('mapBg').style.pointerEvents = 'none';
+        moveGlassBoxUp();
+      } else {
+        moveGlassBoxDown();
       }
     }
+
+    // Clicking anywhere on the glass card while at bottom moves it back up to input data
+    document.getElementById('glassBox').addEventListener('click', (e) => {
+      if (isRequestDone) {
+        moveGlassBoxUp();
+      }
+    });
 
     function showSnackbar(message, type = 'success') {
       const snackbar = document.getElementById('snackbar');
@@ -463,7 +515,7 @@
       
       setTimeout(() => {
         snackbar.classList.remove('show');
-      }, 3000);
+      }, 3500);
     }
 
     function verifyRoute() {
@@ -481,11 +533,17 @@
         return;
       }
 
+      // Clear any running polling interval
+      clearExistingProgressInterval();
+
+      // Ensure glass box is in center
+      moveGlassBoxUp();
+
       // Switch to loading view
       document.getElementById('formView').classList.remove('active');
       document.getElementById('loadingView').classList.add('active');
 
-      // Call the real API endpoint
+      // Call the API endpoint
       initiateMapGeneration(start, end, travelMode);
     }
 
@@ -497,7 +555,11 @@
           travel_mode: travelMode
         });
 
-        const response = await fetch(`/generate_map_v2?${params}`);
+        const response = await fetch(`${API_BASE}/generate_map_v2?${params}`);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Erro HTTP ${response.status}`);
+        }
         const data = await response.json();
 
         if (data.task_id) {
@@ -509,48 +571,67 @@
         }
       } catch (error) {
         console.error('Error:', error);
-        showSnackbar('Erro de conexão: ' + error.message, 'error');
+        showSnackbar('Erro ao iniciar rota: ' + error.message, 'error');
         resetToForm();
       }
     }
 
     function pollProgress() {
+      clearExistingProgressInterval();
+      pollAttempts = 0;
+
       const stageEl = document.getElementById('loadingStage');
       const percentEl = document.getElementById('loadingPercent');
+      stageEl.innerText = 'Iniciando processamento...';
+      percentEl.innerText = '0% concluído';
 
       progressInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`/progress/${currentTaskId}`);
-          const data = await response.json();
+        pollAttempts++;
+        if (pollAttempts > MAX_POLL_ATTEMPTS) {
+          clearExistingProgressInterval();
+          showSnackbar('Tempo limite excedido ao gerar mapa', 'error');
+          resetToForm();
+          return;
+        }
 
+        try {
+          const response = await fetch(`${API_BASE}/progress/${currentTaskId}`);
+          if (!response.ok) {
+            clearExistingProgressInterval();
+            showSnackbar('Erro ao verificar progresso da rota', 'error');
+            resetToForm();
+            return;
+          }
+
+          const data = await response.json();
           const stageLabel = stageLabels[data.stage] || data.stage || 'Processando...';
-          const percent = data.percent || 0;
+          const percent = data.percent !== undefined ? data.percent : 0;
           const detail = data.detail || '';
 
           stageEl.innerText = stageLabel;
           percentEl.innerText = `${percent}% concluído`;
 
           // If task is complete, fetch the result
-          if (data.state === 'SUCCESS') {
-            clearInterval(progressInterval);
+          if (data.state === 'SUCCESS' || data.stage === 'complete') {
+            clearExistingProgressInterval();
             setTimeout(() => fetchMapResult(), 500);
-          } else if (data.state === 'FAILURE') {
-            clearInterval(progressInterval);
-            showSnackbar('Erro ao gerar mapa: ' + detail, 'error');
+          } else if (data.state === 'FAILURE' || data.stage === 'failed') {
+            clearExistingProgressInterval();
+            showSnackbar('Erro ao gerar mapa: ' + (detail || 'Falha no processamento'), 'error');
             resetToForm();
           }
         } catch (error) {
           console.error('Error polling progress:', error);
-          clearInterval(progressInterval);
+          clearExistingProgressInterval();
           showSnackbar('Erro ao verificar progresso', 'error');
           resetToForm();
         }
-      }, 500); // Poll every 500ms
+      }, 1500);
     }
 
     async function fetchMapResult() {
       try {
-        const response = await fetch(`/result/${currentTaskId}`);
+        const response = await fetch(`${API_BASE}/result/${currentTaskId}`);
         if (response.ok) {
           const blob = await response.blob();
           const url = window.URL.createObjectURL(blob);
@@ -558,6 +639,7 @@
           if (mapIframe) {
             mapIframe.src = url;
           }
+          hasGeneratedMap = true;
           completeRequest();
         } else {
           showSnackbar('Erro ao recuperar mapa gerado', 'error');
@@ -565,29 +647,27 @@
         }
       } catch (error) {
         console.error('Error fetching result:', error);
-        showSnackbar('Erro ao carregar resultado', 'error');
+        showSnackbar('Erro ao carregar resultado: ' + error.message, 'error');
         resetToForm();
       }
     }
 
     function resetToForm() {
+      clearExistingProgressInterval();
       document.getElementById('loadingView').classList.remove('active');
       document.getElementById('formView').classList.add('active');
       currentTaskId = null;
     }
 
     function completeRequest() {
+      clearExistingProgressInterval();
+
       // Revert to form view
       document.getElementById('loadingView').classList.remove('active');
       document.getElementById('formView').classList.add('active');
 
-      // Animate box to the bottom (Alignment.bottomCenter in Flutter)
-      isRequestDone = true;
-      document.getElementById('glassBox').classList.add('request-done');
-      
-      // Make map look interactive
-      document.getElementById('mapBg').style.filter = 'brightness(1) saturate(1)';
-      document.getElementById('mapBg').style.pointerEvents = 'auto';
+      // Animate box to the bottom
+      moveGlassBoxDown();
 
       showSnackbar('Mapa gerado com sucesso!', 'success');
     }

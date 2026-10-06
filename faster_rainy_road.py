@@ -18,6 +18,7 @@ VALHALLA_URL = os.getenv("VALHALLA_BASE_URL", "https://valhalla1.openstreetmap.d
 GW_API_KEY = os.getenv("GW_API_KEY")
 OM_ENABLED = os.getenv("OPEN_METEO_ENABLED", "False").lower() in ("true", "1", "yes")
 PHOTON_ENABLED = os.getenv("PHOTON_ENABLED", "False").lower() in ("true", "1", "yes")
+CARTO_API_KEY = os.getenv("CARTO_API_KEY") or os.getenv("CARTO_KEY")
 
 # Simple file-based cache for geocoding results
 GEOCODE_CACHE_FILE = ".geocode_cache.json"
@@ -309,7 +310,25 @@ def get_map(route_data, start_latlng, end_latlng, trip_info=None):
                 
             previous_index = index
 
-    route_map = folium.Map(location=[mid_lat, mid_lon], zoom_start=9, tiles="CartoDB positron")
+    if CARTO_API_KEY:
+        carto_style = os.getenv("CARTO_STYLE", "voyager").lower()
+        style_map = {
+            "voyager": "voyager",
+            "positron": "light_all",
+            "light_all": "light_all",
+            "dark_matter": "dark_all",
+            "dark_all": "dark_all",
+        }
+        style_path = style_map.get(carto_style, "voyager")
+        tiles_url = f"https://basemaps.cartocdn.com/rastertiles/{style_path}/{{z}}/{{x}}/{{y}}.png?key={CARTO_API_KEY}"
+        route_map = folium.Map(
+            location=[mid_lat, mid_lon],
+            zoom_start=9,
+            tiles=tiles_url,
+            attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        )
+    else:
+        route_map = folium.Map(location=[mid_lat, mid_lon], zoom_start=9, tiles="CartoDB positron")
     
     for segment in segment_data:
         volume_mm = segment["volume"]
