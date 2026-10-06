@@ -1,13 +1,6 @@
 version: "3.8"
 
 services:
-  redis:
-    image: redis:alpine
-    container_name: rainy-road-redis
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-
   web:
     build: .
     container_name: rainy-road-web
@@ -21,16 +14,17 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GENERATED_MAPS_DIR=${GENERATED_MAPS_DIR:-generated_maps}
       - MAP_MAX_AGE_SECONDS=${MAP_MAX_AGE_SECONDS:-7200}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://shared_redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://shared_redis:6379/0}
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES:-7200}
       - CARTO_API_KEY=${CARTO_API_KEY}
       - CARTO_STYLE=${CARTO_STYLE:-voyager}
     volumes:
       - ./generated_maps:/app/generated_maps
       - ./cache:/app/cache
-    depends_on:
-      - redis
+    networks:
+      - default
+      - shared-net
     restart: unless-stopped
 
   celery:
@@ -45,17 +39,20 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - GENERATED_MAPS_DIR=${GENERATED_MAPS_DIR:-generated_maps}
       - MAP_MAX_AGE_SECONDS=${MAP_MAX_AGE_SECONDS:-7200}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://shared_redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://shared_redis:6379/0}
       - CELERY_RESULT_EXPIRES=${CELERY_RESULT_EXPIRES:-7200}
       - CARTO_API_KEY=${CARTO_API_KEY}
       - CARTO_STYLE=${CARTO_STYLE:-voyager}
     volumes:
       - ./generated_maps:/app/generated_maps
       - ./cache:/app/cache
-    depends_on:
-      - redis
+    networks:
+      - default
+      - shared-net
     restart: unless-stopped
 
-volumes:
-  redis_data:
+networks:
+  default:
+  shared-net:
+    external: true
